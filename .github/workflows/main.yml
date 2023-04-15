@@ -1,0 +1,153 @@
+name: CI
+
+on: [push, pull_request]
+
+env:
+  DEFAULT_PYTHON: 3.9
+
+jobs:
+  black:
+    name: Check black
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v3
+        with:
+          python-version: ${{ env.DEFAULT_PYTHON }}
+      - uses: psf/black@23.1.0
+        with:
+          options: "--check"
+          src: "."
+
+  isort:
+    name: Check isort
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v3
+        with:
+          python-version: ${{ env.DEFAULT_PYTHON }}
+      - uses: jamescurtin/isort-action@master
+
+  flake8:
+    name: Check flake8
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v3
+        with:
+          python-version: ${{ env.DEFAULT_PYTHON }}
+      - uses: TrueBrain/actions-flake8@master
+
+  pylint:
+    name: Check pylint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v3
+        with:
+          python-version: ${{ env.DEFAULT_PYTHON }}
+      - name: Install Requirements
+        run: |
+          python -m pip install --upgrade pip
+      - name: Install local package
+        run: pip install -e .[test]
+      - name: Run Pylint
+        run: |
+          pylint mqtt_entity
+
+  mypy:
+    name: Check mypy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v3
+        with:
+          python-version: ${{ env.DEFAULT_PYTHON }}
+      - name: Install Requirements
+        run: |
+          pip install mypy .
+      - name: Run mypy
+        continue-on-error: true
+        run: |
+          mypy --install-types --non-interactive mqtt_entity/
+
+  pydocstyle:
+    name: Check pydocstyle
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v3
+        with:
+          python-version: ${{ env.DEFAULT_PYTHON }}
+      - name: Install Requirements
+        run: |
+          pip install pydocstyle
+      - name: Run pydocstyle
+        run: |
+          pydocstyle
+
+  pytest:
+    name: Run tests Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: [3.9]
+    needs:
+      - black
+      - isort
+      - flake8
+      - pylint
+    env:
+      PYTHON: ${{ matrix.python-version }}
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v3
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install Requirements
+        run: |
+          python -m pip install --upgrade pip
+      - name: Install local package
+        run: pip install -e .[test]
+      - name: Run tests and generate coverage report
+        run: |
+          pytest --cov=./mqtt_entity --cov-report=xml -- tests/
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v1
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          env_vars: PYTHON
+          verbose: true
+
+  build-n-publish:
+    name: Build and publish Python 🐍 distributions 📦 to PyPI
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags')
+    needs:
+      - pytest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Python ${{ env.DEFAULT_PYTHON }}
+        uses: actions/setup-python@v3
+        with:
+          python-version: ${{ env.DEFAULT_PYTHON }}
+      - name: Install pypa/build
+        run: >-
+          python -m
+          pip install
+          build
+          --user
+      - name: Build a binary wheel and a source tarball
+        run: >-
+          python -m
+          build
+          --sdist
+          --wheel
+          --outdir dist/
+          .
+      - name: Publish distribution 📦 to PyPI
+        uses: pypa/gh-action-pypi-publish@master
+        with:
+          password: ${{ secrets.PYPI_API_TOKEN }}

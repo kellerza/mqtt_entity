@@ -1,0 +1,12 @@
+"""mqtt_entity library."""
+from mqtt_entity.client import MQTTClient  # noqa
+from mqtt_entity.entities import (  # noqa
+    Availability,
+    BinarySensorEntity,
+    Device,
+    SelectEntity,
+    SensorEntity,
+    SwitchEntity,
+)
+
+VERSION = "0.0.1"
