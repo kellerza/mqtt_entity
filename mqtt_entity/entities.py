@@ -1,9 +1,10 @@
 """MQTT entities."""
 import inspect
 import logging
-from typing import Any, Callable, Sequence, Union
+from typing import Any, Callable, Optional, Sequence, Union
 
 import attr
+from attrs import validators
 
 from mqtt_entity.utils import required
 
@@ -16,7 +17,9 @@ _LOGGER = logging.getLogger(__name__)
 class Device:
     """A Home Assistant Device, used to group entities."""
 
-    identifiers: list[Union[str, tuple[str, Any]]] = attr.field(validator=required)
+    identifiers: list[Union[str, tuple[str, Any]]] = attr.field(
+        validator=[validators.instance_of(list), validators.min_len(1)]
+    )
     connections: list[str] = attr.field(factory=list)
     configuration_url: str = attr.field(default="")
     manufacturer: str = attr.field(default="")
@@ -65,6 +68,8 @@ class Entity:
 
     def __attrs_post_init__(self) -> None:
         """Init the class."""
+        if not self._path:
+            raise TypeError(f"Do not instantiate {self.__class__.__name__} directly")
         if not self.state_class and self.device_class == "energy":
             self.state_class = "total_increasing"
 
@@ -106,64 +111,42 @@ class BinarySensorEntity(Entity):
 
 
 @attr.define
-class SelectEntity(Entity):
+class RWEntity(Entity):
+    """Read/Write entity base class."""
+
+    command_topic: str = attr.field(
+        default="", validator=(validators.instance_of(str), validators.min_len(2))
+    )
+
+    on_change: Optional[Callable] = attr.field(default=None)
+
+
+@attr.define
+class SelectEntity(RWEntity):
     """A HomeAssistant Select entity."""
 
-    command_topic: str = attr.field(default=None, validator=required)
     options: Sequence[str] = attr.field(default=None, validator=required)
-
-    on_change: Callable = attr.field(default=None)
 
     _path = "select"
 
 
 @attr.define
-class SwitchEntity(Entity):
+class SwitchEntity(RWEntity):
     """A Home Assistant Binary Sensor entity."""
 
     payload_on: Union[str, int] = attr.field(default=1)
     payload_off: Union[str, int] = attr.field(default=0)
-    command_topic: str = attr.field(default=None, validator=required)
 
-    on_change: Callable = attr.field(default=None)
     _path = "switch"
 
 
 @attr.define
-class NumberEntity(Entity):
+class NumberEntity(RWEntity):
     """A HomeAssistant Number entity."""
 
-    command_topic: str = attr.field(default=None, validator=required)
     min: float = attr.field(default=0.0)
     max: float = attr.field(default=100.0)
     mode: str = attr.field(default="auto")
     step: float = attr.field(default=1.0)
 
-    on_change: Callable = attr.field(default=None)
-
     _path = "number"
-
-
-def hass_device_class(*, unit: str) -> str:
-    """Get the HASS device_class from the unit."""
-    return {
-        "W": "power",
-        "kW": "power",
-        "kVA": "apparent_power",
-        "V": "voltage",
-        "kWh": "energy",
-        "kVah": "",  # Not energy
-        "A": "current",
-        "°C": "temperature",
-        "%": "battery",
-    }.get(unit, "")
-
-
-def hass_default_rw_icon(*, unit: str) -> str:
-    """Get the HASS default icon from the unit."""
-    return {
-        "W": "mdi:flash",
-        "V": "mdi:sine-wave",
-        "A": "mdi:current-ac",
-        "%": "mdi:battery-lock",
-    }.get(unit, "")

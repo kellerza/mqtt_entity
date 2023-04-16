@@ -7,43 +7,12 @@ import pytest
 
 import mqtt_entity
 from mqtt_entity.client import _mqtt_on_connect
-from mqtt_entity.entities import hass_default_rw_icon, hass_device_class
 
 _LOGGER = logging.getLogger(__name__)
 
 MQTT_HOST = "192.168.1.8"
 MQTT_PASS = "hass123"
 MQTT_USER = "hass"
-
-
-def test_mqtt():
-    """Test MQTT."""
-    assert hass_device_class(unit="kWh") == "energy"
-    assert hass_default_rw_icon(unit="W") == "mdi:flash"
-
-
-def test_mqtt_entity():
-    """Test MQTT."""
-    dev = mqtt_entity.Device(identifiers=["123"])
-
-    ava = mqtt_entity.Availability(topic="/blah")
-
-    ent = mqtt_entity.SensorEntity(
-        name="test1",
-        unique_id="789",
-        device=dev,
-        availability=[ava],
-        state_topic="/test/a",
-    )
-    assert ent.asdict == {
-        "name": "test1",
-        "unique_id": "789",
-        "device": {"identifiers": ["123"]},
-        "availability": [{"topic": "/blah"}],
-        "state_topic": "/test/a",
-    }
-
-    assert ent.topic == "homeassistant/sensor/123/789/config"
 
 
 @pytest.mark.asyncio

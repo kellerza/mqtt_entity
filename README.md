@@ -1,4 +1,5 @@
 # MQTT Entity helper library for Home Assistant
+[![codecov](https://codecov.io/gh/kellerza/mqtt_entity/branch/main/graph/badge.svg?token=PG4N1YBUGW)](https://codecov.io/gh/kellerza/mqtt_entity)
 
 A Python helper library to manage Home Assistant entities over MQTT.
 
