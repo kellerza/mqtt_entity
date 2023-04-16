@@ -9,4 +9,4 @@ from mqtt_entity.entities import (  # noqa
     SwitchEntity,
 )
 
-VERSION = "0.0.1"
+VERSION = "0.0.2"

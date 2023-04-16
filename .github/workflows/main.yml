@@ -115,7 +115,7 @@ jobs:
         run: |
           pytest --cov=./mqtt_entity --cov-report=xml -- tests/
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v1
+        uses: codecov/codecov-action@v3
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           env_vars: PYTHON
