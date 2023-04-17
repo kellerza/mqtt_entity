@@ -81,7 +81,7 @@ class MQTTClient:
 
     async def publish(
         self,
-        topic: Union[str | Entity],
+        topic: Union[str, Entity],
         payload: Optional[str],
         qos: int = 0,
         retain: bool = False,
