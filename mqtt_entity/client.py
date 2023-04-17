@@ -3,7 +3,7 @@ import asyncio
 import inspect
 import logging
 from json import dumps
-from typing import Any, Callable, Optional, Sequence
+from typing import Any, Callable, Optional, Sequence, Union
 
 from paho.mqtt.client import Client, MQTTMessage  # type: ignore
 
@@ -80,10 +80,16 @@ class MQTTClient:
         await asyncio.get_running_loop().run_in_executor(None, _stop)
 
     async def publish(
-        self, topic: str, payload: Optional[str], qos: int = 0, retain: bool = False
+        self,
+        topic: Union[str | Entity],
+        payload: Optional[str],
+        qos: int = 0,
+        retain: bool = False,
     ) -> None:
         """Publish a MQTT message."""
         # async with self._paho_lock:
+        if isinstance(topic, Entity):
+            topic = topic.state_topic
         if not isinstance(qos, int):
             qos = 0
         if retain:
