@@ -42,7 +42,7 @@ async def set_attributes(
     """Set attributes helper."""
     if not entity.attributes_topic:
         raise ValueError(f"Entity '{entity.name}' needs an attributes_topic.")
-    return await client.publish(
+    await client.publish(
         topic=entity.attributes_topic,
         payload=dumps(attributes),
         retain=retain,
