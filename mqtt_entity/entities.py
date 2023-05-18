@@ -63,6 +63,8 @@ class Entity:
     enabled_by_default: bool = attrs.field(default=True)
     entity_category: str = attrs.field(default="")
     icon: str = attrs.field(default="")
+    attributes_topic: str = attrs.field(default="")
+    """Used by the set_attributes helper."""
 
     _path = ""
 
@@ -114,7 +116,8 @@ class BinarySensorEntity(Entity):
 class RWEntity(Entity):
     """Read/Write entity base class.
 
-    This will default to a text entiry."""
+    This will default to a text entity.
+    """
 
     command_topic: str = attrs.field(
         default="", validator=(validators.instance_of(str), validators.min_len(2))

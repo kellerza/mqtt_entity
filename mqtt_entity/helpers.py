@@ -1,4 +1,9 @@
 """Helpers."""
+from json import dumps
+from typing import Any
+
+from mqtt_entity.client import MQTTClient
+from mqtt_entity.entities import Entity
 
 
 def hass_default_rw_icon(*, unit: str) -> str:
@@ -25,3 +30,20 @@ def hass_device_class(*, unit: str) -> str:
         "°C": "temperature",
         "%": "battery",
     }.get(unit, "")
+
+
+async def set_attributes(
+    attributes: dict[str, Any],
+    *,
+    entity: Entity,
+    client: MQTTClient,
+    retain: bool = False,
+) -> None:
+    """Set attributes helper."""
+    if not entity.attributes_topic:
+        raise ValueError(f"Entity '{entity.name}' needs an attributes_topic.")
+    return await client.publish(
+        topic=entity.attributes_topic,
+        payload=dumps(attributes),
+        retain=retain,
+    )
