@@ -112,13 +112,17 @@ class BinarySensorEntity(Entity):
 
 @attr.define
 class RWEntity(Entity):
-    """Read/Write entity base class."""
+    """Read/Write entity base class.
+
+    This will default to a text entiry."""
 
     command_topic: str = attr.field(
         default="", validator=(validators.instance_of(str), validators.min_len(2))
     )
 
     on_change: Optional[Callable] = attr.field(default=None)
+
+    _path = "text"
 
 
 @attr.define

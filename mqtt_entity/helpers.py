@@ -17,9 +17,10 @@ def hass_device_class(*, unit: str) -> str:
         "W": "power",
         "kW": "power",
         "kVA": "apparent_power",
+        "VA": "apparent_power",
         "V": "voltage",
         "kWh": "energy",
-        "kVah": "",  # Not energy
+        "kVAh": "",  # Not energy
         "A": "current",
         "°C": "temperature",
         "%": "battery",
