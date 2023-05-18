@@ -3,7 +3,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from mqtt_entity.entities import Entity
+from mqtt_entity import Device, Entity
 from mqtt_entity.helpers import hass_default_rw_icon, hass_device_class, set_attributes
 
 
@@ -16,7 +16,14 @@ def test_helpers():
 @pytest.mark.asyncio
 async def test_set_attributes():
     """Test set_attributes."""
-    e = Entity(attributes_topic="blah")
+    dev = Device(identifiers=["test123"])
+    e = Entity(
+        attributes_topic="blah",
+        unique_id="a1",
+        device=dev,
+        state_topic="/st",
+        name="test1",
+    )
     mc = MagicMock()
     thea = {"the": "attr"}
     assert await set_attributes(thea, entity=e, client=mc) is None
