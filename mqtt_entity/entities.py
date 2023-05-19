@@ -6,7 +6,7 @@ from typing import Any, Callable, Optional, Sequence, Union
 import attrs
 from attrs import validators
 
-from mqtt_entity.utils import required
+from mqtt_entity.utils import BOOL_OFF, BOOL_ON, required
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -106,8 +106,8 @@ class SensorEntity(Entity):
 class BinarySensorEntity(Entity):
     """A Home Assistant Binary Sensor entity."""
 
-    payload_on: str = attrs.field(default="ON")
-    payload_off: str = attrs.field(default="OFF")
+    payload_on: str = attrs.field(default=BOOL_ON)
+    payload_off: str = attrs.field(default=BOOL_OFF)
 
     _path = "binary_sensor"
 
@@ -139,10 +139,10 @@ class SelectEntity(RWEntity):
 
 @attrs.define
 class SwitchEntity(RWEntity):
-    """A Home Assistant Binary Sensor entity."""
+    """A Home Assistant Switch entity."""
 
-    payload_on: Union[str, int] = attrs.field(default=1)
-    payload_off: Union[str, int] = attrs.field(default=0)
+    payload_on: str = attrs.field(default=BOOL_ON)
+    payload_off: str = attrs.field(default=BOOL_OFF)
 
     _path = "switch"
 
