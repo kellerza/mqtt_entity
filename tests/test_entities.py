@@ -69,3 +69,31 @@ def test_mqtt_entity():
     }
 
     assert ent.topic == "homeassistant/sensor/123/789/config"
+
+
+def discovery_extra():
+    """Test discovery_extra."""
+    dev = Device(identifiers=["123"])
+
+    ava = Availability(topic="/blah")
+
+    ent = SensorEntity(
+        name="test1",
+        unique_id="789",
+        device=dev,
+        availability=[ava],
+        state_topic="/test/a",
+        json_attributes_topic="/test/f",
+        discovery_extra={"a": "b", "state_topic": "c"},
+    )
+    assert ent.asdict == {
+        "name": "test1",
+        "unique_id": "789",
+        "device": {"identifiers": ["123"]},
+        "availability": [{"topic": "/blah"}],
+        "json_attributes_topic": "/test/f",
+        "state_topic": "c",
+        "a": "b",
+    }
+
+    assert ent.topic == "homeassistant/sensor/123/789/config"

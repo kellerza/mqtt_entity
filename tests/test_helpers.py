@@ -18,7 +18,7 @@ async def test_set_attributes():
     """Test set_attributes."""
     dev = Device(identifiers=["test123"])
     e = SensorEntity(
-        attributes_topic="blah",
+        json_attributes_topic="blah",
         unique_id="a1",
         device=dev,
         state_topic="/st",

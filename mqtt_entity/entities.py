@@ -63,8 +63,11 @@ class Entity:
     enabled_by_default: bool = attrs.field(default=True)
     entity_category: str = attrs.field(default="")
     icon: str = attrs.field(default="")
-    attributes_topic: str = attrs.field(default="")
+    json_attributes_topic: str = attrs.field(default="")
     """Used by the set_attributes helper."""
+
+    discovery_extra: dict[str, Any] = attrs.field(factory=dict)
+    """Additional MQTT Discovery attributes."""
 
     _path = ""
 
@@ -76,15 +79,23 @@ class Entity:
             self.state_class = "total_increasing"
 
     @property
-    def asdict(self) -> dict:
+    def asdict(self) -> dict[str, Any]:
         """Represent the entity as a dictionary, without empty values and defaults."""
 
         def _filter(atrb: attrs.Attribute, value: Any) -> bool:
+            if atrb.name == "discovery_extra":
+                return False
             return (
                 bool(value) and atrb.default != value and not inspect.isfunction(value)
             )
 
-        return attrs.asdict(self, filter=_filter)
+        res = attrs.asdict(self, filter=_filter)
+        for key in self.discovery_extra:
+            if key in res and res[key] != self.discovery_extra[key]:
+                _LOGGER.debug("Overwriting %s with %s", key, self.discovery_extra[key])
+        res.update(self.discovery_extra)
+
+        return res
 
     @property
     def topic(self) -> str:

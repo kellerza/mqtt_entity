@@ -40,10 +40,10 @@ async def set_attributes(
     retain: bool = False,
 ) -> None:
     """Set attributes helper."""
-    if not entity.attributes_topic:
-        raise ValueError(f"Entity '{entity.name}' needs an attributes_topic.")
+    if not entity.json_attributes_topic:
+        raise ValueError(f"Entity '{entity.name}' needs an json_attributes_topic.")
     await client.publish(
-        topic=entity.attributes_topic,
+        topic=entity.json_attributes_topic,
         payload=dumps(attributes),
         retain=retain,
     )
