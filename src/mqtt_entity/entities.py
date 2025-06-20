@@ -57,7 +57,6 @@ class DiscoveryEntity:
 
     def discovery_final(self, result: dict[str, Any]) -> None:
         """Return the final discovery dictionary."""
-        pass
 
     @property
     def asdict(self) -> dict[str, Any]:
