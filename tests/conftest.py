@@ -1,3 +1,5 @@
+"""pytest configuration for the tests."""
+
 import os
 import sys
 from importlib import import_module as _import_module
@@ -29,6 +31,7 @@ def pytest_configure(config: Any) -> None:
 
 
 def pytest_collection_modifyitems(config: Any, items: Any) -> None:
+    """Skip tests based on command line options."""
     for mrk in MARKERS:
         if not config.getoption(f"--{mrk}"):
             skip_mrk = pytest.mark.skip(reason=f"need --{mrk} option to run")

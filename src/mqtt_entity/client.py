@@ -6,7 +6,8 @@ import logging
 from json import dumps
 from typing import Any, Callable, Coroutine, Sequence
 
-from paho.mqtt.client import Client, MQTTMessage  # type: ignore
+from paho.mqtt.client import Client, MQTTMessage
+from paho.mqtt.reasoncodes import ReasonCode
 
 from mqtt_entity.entities import Availability, DeviceTrigger, Entity
 
@@ -32,7 +33,7 @@ class MQTTClient:
         *,
         username: str | None = None,
         password: str | None = None,
-        host: str | None = None,
+        host: str = "homeassistant.local",
         port: int = 1883,
     ) -> None:
         """Connect to MQTT server specified as attributes of the options."""
@@ -217,14 +218,24 @@ class MQTTClient:
 
 
 def _mqtt_on_connect(
-    _client: Client, _userdata: Any, _flags: Any, _rc: int, _prop: Any = None
+    _client: Client,
+    _userdata: Any,
+    _flags: Any,
+    _rc: ReasonCode,
+    _prop: Any = None,
 ) -> None:
-    msg = {
-        0: "successful",
-        1: "refused - incorrect protocol version",
-        2: "refused - invalid client identifier",
-        3: "refused - server unavailable",
-        4: "refused - bad username or password",
-        5: "refused - not authorised",
-    }.get(_rc, f"refused - {_rc}")
-    _LOGGER.info("MQTT: Connection %s", msg)
+    """MQTT on_connect callback."""
+    if _rc == 0:
+        _LOGGER.info("MQTT: Connection successful")
+        return
+    _LOGGER.error("MQTT: Connection failed with reason code %s", _rc)
+
+    # msg = {
+    #     mqttc.CONNACK_ACCEPTED: "successful",
+    #     mqttc.CONNACK_REFUSED_PROTOCOL_VERSION: "refused - incorrect protocol version",
+    #     mqttc.CONNACK_REFUSED_IDENTIFIER_REJECTED: "refused - invalid client identifier",
+    #     mqttc.CONNACK_REFUSED_SERVER_UNAVAILABLE: "refused - server unavailable",
+    #     mqttc.CONNACK_REFUSED_BAD_USERNAME_PASSWORD: "refused - bad username or password",
+    #     mqttc.CONNACK_REFUSED_NOT_AUTHORIZED: "refused - not authorised",
+    # }.get(_rc, f"refused - {_rc}")
+    # _LOGGER.info("MQTT: Connection %s", msg)

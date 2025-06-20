@@ -75,7 +75,7 @@ async def test_mqtt_server() -> None:
     await mqc.publish(f"test/{select_id}", "opt 2")
     await mqc.publish(f"test/{select_id2}", "opt 3")
     await mqc.publish(f"test/{sense_id}", "yay!")
-    for i in range(100):
+    for _ in range(100):
         await asyncio.sleep(0.5)
     await mqc.remove_discovery_info(device_ids=[dev.id, dev2.id], keep_topics=[])
 
@@ -153,7 +153,7 @@ async def test_connect(caplog: pytest.LogCaptureFixture) -> None:
         # assert cl._client == cmock
 
         _LOGGER.error(dir(client))
-        assert isinstance(mqc._client, Mock)
+        assert isinstance(mqc._client, Mock)  # pylint: disable=protected-access
 
         await mqc.connect(None)
 
@@ -162,5 +162,5 @@ async def test_connect(caplog: pytest.LogCaptureFixture) -> None:
         mmock.is_connected.assert_called()
 
         assert "Connection" not in caplog.text
-        _mqtt_on_connect(client, None, None, 1)
+        _mqtt_on_connect(client, None, None, 0)  # type:ignore
         # assert "Connection" in caplog.text

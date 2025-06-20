@@ -172,7 +172,7 @@ dev = [
 requires-dist = [
     { name = "attrs", specifier = ">=25.3.0" },
     { name = "cattrs", marker = "extra == 'options'", specifier = ">=25.1.1" },
-    { name = "paho-mqtt", specifier = "~=1.5.0" },
+    { name = "paho-mqtt", specifier = ">=2.1.0,<3" },
     { name = "pyyaml", marker = "extra == 'options'", specifier = ">=6.0.2" },
 ]
 provides-extras = ["options"]
@@ -241,9 +241,12 @@ wheels = [
 
 [[package]]
 name = "paho-mqtt"
-version = "1.5.1"
+version = "2.1.0"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/32/d3/6dcb8fd14746fcde6a556f932b5de8bea8fedcb85b3a092e0e986372c0e7/paho-mqtt-1.5.1.tar.gz", hash = "sha256:9feb068e822be7b3a116324e01fb6028eb1d66412bf98595ae72698965cb1cae", size = 101757 }
+sdist = { url = "https://files.pythonhosted.org/packages/39/15/0a6214e76d4d32e7f663b109cf71fb22561c2be0f701d67f93950cd40542/paho_mqtt-2.1.0.tar.gz", hash = "sha256:12d6e7511d4137555a3f6ea167ae846af2c7357b10bc6fa4f7c3968fc1723834", size = 148848 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/c4/cb/00451c3cf31790287768bb12c6bec834f5d292eaf3022afc88e14b8afc94/paho_mqtt-2.1.0-py3-none-any.whl", hash = "sha256:6db9ba9b34ed5bc6b6e3812718c7e06e2fd7444540df2455d2c51bd58808feee", size = 67219 },
+]
 
 [[package]]
 name = "pathspec"

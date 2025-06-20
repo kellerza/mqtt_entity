@@ -28,12 +28,14 @@ repos:
     hooks:
       - id: pylint
         name: pylint
-        entry: pylint
+        entry: uv
         language: system
         types: [python]
         pass_filenames: false
-        args: [
-            "src",
-            "-rn", # Only display messages
-            "-sn", # Don't display the score
-          ]
+        args:
+          - run
+          - pylint
+          - src
+          - tests
+          - -rn # Only display messages
+          - -sn # Don't display the score
