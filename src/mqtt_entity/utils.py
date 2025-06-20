@@ -1,4 +1,5 @@
 """Utilities."""
+
 from math import modf
 from typing import Any
 

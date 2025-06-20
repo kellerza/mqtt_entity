@@ -1,27 +1,21 @@
 repos:
-  - repo: https://github.com/psf/black
-    rev: 23.7.0
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.11.3
     hooks:
-      - id: black
-        args:
-          - --quiet
-  - repo: https://github.com/PyCQA/isort
-    rev: 5.12.0
-    hooks:
-      - id: isort
-  - repo: https://github.com/pycqa/flake8
-    rev: 6.1.0
-    hooks:
-      - id: flake8
+      - id: ruff
+        args: [--fix, --exit-non-zero-on-fix]
+      - id: ruff-format
+
   - repo: https://github.com/codespell-project/codespell
-    rev: v2.2.5
+    rev: v2.4.1
     hooks:
       - id: codespell
         args:
           - -L
           - HASS,hass,Hass
           - --skip
-          - "package-lock.json,*.map,www/docs/.vitepress/cache/*"
+          - "uv.lock,*.map"
+
   - repo: https://github.com/pre-commit/mirrors-mypy
     rev: v1.4.1
     hooks:
@@ -29,9 +23,3 @@ repos:
         files: "^(mqtt_entity)/"
         #exclude: "x/x.py"
         additional_dependencies: ["attrs>22"]
-  - repo: https://github.com/pycqa/pydocstyle
-    rev: 6.3.0
-    hooks:
-      - id: pydocstyle
-        files: "mqtt_entity/.*.py"
-        exclude: "tests/"

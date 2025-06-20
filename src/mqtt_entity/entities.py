@@ -1,4 +1,5 @@
 """MQTT entities."""
+
 import inspect
 import logging
 from typing import Any, Callable, Optional, Sequence, Union

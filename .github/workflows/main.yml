@@ -3,130 +3,87 @@ name: CI
 on: [push, pull_request]
 
 env:
-  DEFAULT_PYTHON: 3.9
+  RUFF_VERSION: 0.11.3
+  UV_VERSION: 0.7.8
+  TEST_TARGET: "src"
 
 jobs:
-  main:
+  ruff:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-python@v4
+      - uses: actions/checkout@v4
+      - uses: chartboost/ruff-action@v1
         with:
-          python-version: 3.x
-      - uses: pre-commit/action@v3.0.0
-      - uses: pre-commit-ci/lite-action@v1.0.1
-        if: always()
-
-  black:
-    name: Check black
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-python@v4
+          version: ${{ env.RUFF_VERSION }}
+      - uses: chartboost/ruff-action@v1
         with:
-          python-version: ${{ env.DEFAULT_PYTHON }}
-      - uses: psf/black@23.1.0
-        with:
-          options: "--check"
-          src: "."
-
-  isort:
-    name: Check isort
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-python@v4
-        with:
-          python-version: ${{ env.DEFAULT_PYTHON }}
-      - uses: jamescurtin/isort-action@master
-
-  flake8:
-    name: Check flake8
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-python@v4
-        with:
-          python-version: ${{ env.DEFAULT_PYTHON }}
-      - uses: TrueBrain/actions-flake8@master
+          args: "format --check"
+          version: ${{ env.RUFF_VERSION }}
 
   pylint:
     name: Check pylint
+    needs: [ruff]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-python@v4
+      - uses: actions/checkout@v4
+      - name: "Set up Python"
+        uses: actions/setup-python@v5
         with:
-          python-version: ${{ env.DEFAULT_PYTHON }}
+          python-version-file: "pyproject.toml"
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: ${{ env.UV_VERSION }}
       - name: Install Requirements
-        run: |
-          python -m pip install --upgrade pip
-      - name: Install local package
-        run: pip install -e ".[tests]"
+        run: uv sync --frozen --all-extras
       - name: Run Pylint
-        run: |
-          pylint mqtt_entity
+        run: uv run pylint ${{ env.TEST_TARGET }} -sn
 
   mypy:
     name: Check mypy
+    needs: [ruff]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-python@v4
+      - uses: actions/checkout@v4
+      - name: "Set up Python"
+        uses: actions/setup-python@v5
         with:
-          python-version: ${{ env.DEFAULT_PYTHON }}
+          python-version-file: "pyproject.toml"
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: ${{ env.UV_VERSION }}
       - name: Install Requirements
-        run: |
-          pip install mypy .
+        run: uv sync --frozen --all-extras
       - name: Run mypy
-        continue-on-error: true
-        run: |
-          mypy --install-types --non-interactive mqtt_entity/
-
-  pydocstyle:
-    name: Check pydocstyle
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-python@v4
-        with:
-          python-version: ${{ env.DEFAULT_PYTHON }}
-      - name: Install Requirements
-        run: |
-          pip install pydocstyle
-      - name: Run pydocstyle
-        run: |
-          pydocstyle
+        run: uv run mypy --install-types --non-interactive ${{ env.TEST_TARGET }}/
 
   pytest:
     name: Run tests Python ${{ matrix.python-version }}
+    needs: [ruff]
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.9", "3.10", "3.11"]
-    needs:
-      - black
-      - isort
-      - flake8
-      - pylint
+        python-version: ["3.11", "3.12", "3.13"]
     env:
       PYTHON: ${{ matrix.python-version }}
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-python@v4
+      - uses: actions/checkout@v4
+      - name: "Set up Python"
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: ${{ env.UV_VERSION }}
       - name: Install Requirements
-        run: |
-          python -m pip install --upgrade pip
-      - name: Install local package
-        run: pip install -e ".[tests]"
+        run: uv sync --frozen --all-extras
       - name: Run tests and generate coverage report
-        run: |
-          pytest --cov=./mqtt_entity --cov-report=xml -- tests/
+        run: uv run pytest
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           env_vars: PYTHON
@@ -138,25 +95,19 @@ jobs:
     if: startsWith(github.ref, 'refs/tags')
     needs:
       - pytest
+    permissions:
+      id-token: write # used for trusted publishing
     steps:
-      - uses: actions/checkout@v3
-      - name: Set up Python ${{ env.DEFAULT_PYTHON }}
-        uses: actions/setup-python@v4
+      - uses: actions/checkout@v4
+      - name: "Set up Python"
+        uses: actions/setup-python@v5
         with:
-          python-version: ${{ env.DEFAULT_PYTHON }}
-      - name: Install pypa/build
-        run: >-
-          python -m
-          pip install
-          build
-          --user
+          python-version-file: "pyproject.toml"
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: ${{ env.UV_VERSION }}
       - name: Build a binary wheel and a source tarball
-        run: >-
-          python -m
-          build
-          --sdist
-          --wheel
-          --outdir dist/
-          .
+        run: uv build
       - name: Publish distribution 📦 to PyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
+        run: uv publish

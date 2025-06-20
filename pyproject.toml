@@ -1,0 +1,96 @@
+[project]
+name = "mqtt-entity"
+version = "0.1.0"
+description = "MQTT client to manage Home Assistant entities via MQTT"
+authors = [{ name = "Johann Kellerman", email = "johann.kellerman@nokia.com" }]
+license = { file = "LICENSE" }
+readme = "README.md"
+requires-python = ">=3.10"
+keywords = [
+    "home-assistant",
+    "mqtt",
+    "library",
+    "discovery",
+    "asyncio"
+]
+dependencies = [
+    "attrs>=22",
+    "paho-mqtt~=1.5.0",
+]
+
+[dependency-groups]
+dev = [
+  "pylint>=3,<4",
+  "pytest-cov>=6",
+  "pytest-asyncio",
+  "pytest-github-actions-annotate-failures",
+  "pytest-env>=1",
+  "pytest>=8",
+  "types-PyYAML",
+]
+
+[build-system]
+requires = ["uv_build"]
+build-backend = "uv_build"
+
+[tool.ruff]
+# Assume Python 3.11
+target-version = "py311"
+src = ["src", "test"]
+# pyflakes, pycodestyle, isort
+extend-exclude = [
+]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "lf"
+docstring-code-format = true
+docstring-code-line-length = "dynamic"
+
+[tool.ruff.lint]
+select = ["F", "E", "W", "I001"]
+ignore = ["E203", "E501"]
+
+[tool.mypy]
+disallow_untyped_defs = true
+ignore_missing_imports = true
+warn_unused_configs = true
+exclude = ["src/rfr/modules", "build"]
+
+[[tool.mypy.overrides]]
+module = "tests.*"
+disallow_untyped_defs = true
+
+[tool.pylint]
+extension-pkg-whitelist = ["orjson"]
+
+# https://stackoverflow.com/questions/64162504/settings-for-pylint-in-setup-cfg-are-not-getting-used
+[tool.pylint.'MESSAGES CONTROL']
+max-line-length = 120
+good-names = ["db", "fr", "cr", "k", "i", "ui", "si", "ri", "j"]
+enable = ["W", "E", "F"]
+disable = ["R", "unused-argument"]
+
+
+[tool.pylint.design]
+max-returns = 8
+
+[tool.pytest.ini_options]
+pythonpath = [".", "src"]
+testpaths = "tests"
+filterwarnings = "ignore:.+@coroutine.+deprecated.+"
+norecursedirs = [".git", "modules"]
+log_cli = true
+log_cli_level = "DEBUG"
+asyncio_mode = "auto"
+addopts = "--cov=rfr --cov=admin_scripts --cov-report xml:cov.xml"
+asyncio_default_fixture_loop_scope = "function"
+
+env = [
+  "ENV=1",
+]
+
+[tool.setuptools.package-data]
+"rfr" = ["*.jinja*"]

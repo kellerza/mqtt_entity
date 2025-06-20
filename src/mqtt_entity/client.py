@@ -1,9 +1,10 @@
 """MQTTClient."""
+
 import asyncio
 import inspect
 import logging
 from json import dumps
-from typing import Any, Callable, Optional, Sequence, Union
+from typing import Any, Callable, Coroutine, Optional, Sequence, Union
 
 from paho.mqtt.client import Client, MQTTMessage  # type: ignore
 
@@ -12,11 +13,14 @@ from mqtt_entity.entities import Availability, Entity
 _LOGGER = logging.getLogger(__name__)
 
 
+TopicCallback = Callable[[float | int | str | bool], None | Coroutine[Any, Any, None]]
+
+
 class MQTTClient:
     """Basic MQTT Client."""
 
     availability_topic: str = ""
-    topic_on_change: dict[str, Callable] = {}
+    topic_on_change: dict[str, TopicCallback] = {}
 
     def __init__(self) -> None:
         """Init MQTT Client."""

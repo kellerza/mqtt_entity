@@ -1,4 +1,5 @@
 """mqtt_entity library."""
+
 from mqtt_entity.client import MQTTClient  # noqa
 from mqtt_entity.entities import (  # noqa
     Availability,
@@ -12,4 +13,4 @@ from mqtt_entity.entities import (  # noqa
     SwitchEntity,
 )
 
-VERSION = "0.0.4"
+VERSION = "0.0.5"
