@@ -26,11 +26,12 @@ options = [
 
 [dependency-groups]
 dev = [
+  "mypy",
   "pylint>=3,<4",
-  "pytest-cov>=6",
   "pytest-asyncio",
-  "pytest-github-actions-annotate-failures",
+  "pytest-cov>=6",
   "pytest-env>=1",
+  "pytest-github-actions-annotate-failures",
   "pytest>=8",
   "types-PyYAML",
 ]

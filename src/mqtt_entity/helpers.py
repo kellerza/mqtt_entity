@@ -1,10 +1,9 @@
 """Helpers."""
 
+from __future__ import annotations
+
 import typing
 from json import dumps
-
-from mqtt_entity import Entity
-from mqtt_entity.client import MQTTClient
 
 if typing.TYPE_CHECKING:
     from mqtt_entity.client import MQTTClient
