@@ -1,6 +1,6 @@
 [project]
 name = "mqtt-entity"
-version = "0.2.0"
+version = "0.0.4"
 description = "MQTT client to manage Home Assistant entities via MQTT"
 authors = [{ name = "Johann Kellerman", email = "johann.kellerman@nokia.com" }]
 license = { file = "LICENSE" }
@@ -101,3 +101,22 @@ env = [
 
 [tool.setuptools.package-data]
 "rfr" = ["*.jinja*"]
+
+[tool.semantic_release]
+commit = true
+tag = true
+vcs_release = true
+commit_parser = "emoji"
+# https://python-semantic-release.readthedocs.io/en/latest/configuration.html#version-toml
+version_toml = ["pyproject.toml:project.version"]
+build_command = "pip install uv && uv sync --frozen --all-extras && uv build"
+commit_version_number = true
+
+# https://python-semantic-release.readthedocs.io/en/latest/multibranch_releases.html#configuring-multibranch-releases
+[tool.semantic_release.branches.main]
+match = "master"
+
+[tool.semantic_release.commit_parser_options]
+major_tags = [":boom:"]
+minor_tags = [":rocket:"]
+patch_tags = [":ambulance:", ":lock:", ":bug:", ":dolphin:"]

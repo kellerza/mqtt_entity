@@ -30,3 +30,17 @@ Alternatives options (not based on asyncio)
 ## Credits
 
 @Ivan-L contributed some of the writable entities to the Sunsynk addon project
+
+## Release
+
+Semantic versioning is used for release.
+
+To create a new release, include a commit with a :dolphin: emoji as a prefix in the commit message. This will trigger a release on the master branch.
+
+```bash
+# Patch
+git commit -m ":dolphin: Release 0.0.x"
+
+# Minor
+git commit -m ":rocket: Release 0.x.0"
+```
