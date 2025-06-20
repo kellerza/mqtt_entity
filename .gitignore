@@ -43,6 +43,7 @@ pip-delete-this-directory.txt
 htmlcov/
 .tox/
 .nox/
+cov.xml
 .coverage
 .coverage.*
 .cache
@@ -132,3 +133,4 @@ dmypy.json
 
 # Vscode settings
 .vscode/
+

@@ -11,6 +11,7 @@ from mqtt_entity.entities import (  # noqa
     SelectEntity,
     SensorEntity,
     SwitchEntity,
+    DeviceTrigger,
 )
 
 VERSION = "0.0.5"

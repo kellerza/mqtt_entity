@@ -55,6 +55,10 @@ class DiscoveryEntity:
         """Discovery topic."""
         raise NotImplementedError("Subclasses must implement discovery_topic")
 
+    def discovery_final(self, result: dict[str, Any]) -> None:
+        """Return the final discovery dictionary."""
+        pass
+
     @property
     def asdict(self) -> dict[str, Any]:
         """Represent the entity as a dictionary, without empty values and defaults."""
@@ -78,6 +82,7 @@ class DiscoveryEntity:
             _LOGGER.debug("Overwriting %s", keys)
             res.update(extra)
 
+        self.discovery_final(res)
         return res
 
 
@@ -148,15 +153,18 @@ class DeviceTrigger(DiscoveryEntity):
     """
 
     device: Device
-    topic: str
     """Topic to publish the trigger to."""
+    type: str
     subtype: str
     payload: str
-
-    automation_type: str = "trigger"
-    type: str = "action"
+    topic: str
 
     _path = "device_automation"
+
+    def discovery_final(self, result: dict[str, Any]) -> None:
+        """Return the final discovery dictionary."""
+        result["automation_type"] = "trigger"
+        result["platform"] = "device_automation"
 
     discovery_extra: dict[str, Any] = attrs.field(factory=dict)
     """Additional MQTT Discovery attributes."""
@@ -164,13 +172,13 @@ class DeviceTrigger(DiscoveryEntity):
     @property
     def name(self) -> str:
         """Return the name of the trigger."""
-        return f"{self.device.name} {self.payload}"
+        return f"{self.device.name} {self.type} {self.subtype}".strip()
 
     @property
     def discovery_topic(self) -> str:
         """Discovery topic."""
         did = self.device.id
-        return f"homeassistant/{self._path}/{did}/action_{self.payload}/config"
+        return f"homeassistant/{self._path}/{did}/{self.type}_{self.subtype}/config"
 
 
 @attrs.define()

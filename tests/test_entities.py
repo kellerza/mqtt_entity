@@ -5,6 +5,7 @@ import pytest
 from mqtt_entity import (
     Availability,
     Device,
+    DeviceTrigger,
     Entity,
     NumberEntity,
     SensorEntity,
@@ -71,7 +72,7 @@ def test_mqtt_entity() -> None:
     assert ent.discovery_topic == "homeassistant/sensor/123/789/config"
 
 
-def discovery_extra() -> None:
+def test_discovery_extra() -> None:
     """Test discovery_extra."""
     dev = Device(identifiers=["123"])
 
@@ -97,3 +98,33 @@ def discovery_extra() -> None:
     }
 
     assert ent.discovery_topic == "homeassistant/sensor/123/789/config"
+
+
+def test_device_trigger() -> None:
+    """Test device trigger.
+
+    Examples from: https://www.home-assistant.io/integrations/device_trigger.mqtt/
+    """
+    dev = Device(identifiers=["123", "456"])
+
+    trig = DeviceTrigger(
+        device=dev,
+        type="action",
+        subtype="arrow_left_click",
+        payload="arrow_left_click",
+        topic="zigbee2mqtt/0x90fd9ffffedf1266/action",
+    )
+    assert trig.asdict == {
+        "automation_type": "trigger",
+        "device": {"identifiers": ["123", "456"]},
+        "topic": "zigbee2mqtt/0x90fd9ffffedf1266/action",
+        "type": "action",
+        "subtype": "arrow_left_click",
+        "payload": "arrow_left_click",
+        "platform": "device_automation",
+    }
+
+    assert (
+        trig.discovery_topic
+        == "homeassistant/device_automation/123/action_arrow_left_click/config"
+    )
