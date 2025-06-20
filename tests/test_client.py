@@ -1,4 +1,5 @@
 """Test MQTT class."""
+
 import asyncio
 import logging
 from unittest.mock import MagicMock, Mock, patch
@@ -17,7 +18,7 @@ MQTT_USER = "hass"
 
 @pytest.mark.asyncio
 @pytest.mark.mqtt
-async def test_mqtt_server():
+async def test_mqtt_server() -> None:
     """Test MQTT."""
     mqc = mqtt_entity.MQTTClient()
     mqc.availability_topic = "test/available"
@@ -29,7 +30,7 @@ async def test_mqtt_server():
     select_id2 = "t_select_2"
     sense_id = "t_sense_1"
 
-    async def select_select(msg):
+    async def select_select(msg: str) -> None:
         _LOGGER.error("onchange start: %s", msg)
         await mqc.publish(f"test/{select_id2}", "opt 4")
         await mqc.publish(f"test/{select_id}", msg)
@@ -37,7 +38,7 @@ async def test_mqtt_server():
 
     _loop = asyncio.get_running_loop()
 
-    def select_select2(msg):
+    def select_select2(msg: str) -> None:
         _LOGGER.error("onchange no async: %s", msg)
         _loop.create_task(mqc.publish(f"test/{select_id2}", msg))
         _LOGGER.error("onchange no async done: %s", msg)
@@ -86,7 +87,7 @@ async def test_mqtt_server():
 
 @pytest.mark.asyncio
 @pytest.mark.mqtt
-async def test_mqtt_discovery():
+async def test_mqtt_discovery() -> None:
     """Test MQTT."""
     root = "test2"
     mqc = mqtt_entity.MQTTClient()
@@ -138,7 +139,7 @@ async def test_mqtt_discovery():
 
 
 @pytest.mark.asyncio
-async def test_connect(caplog):
+async def test_connect(caplog: pytest.LogCaptureFixture) -> None:
     """Test connect."""
     with patch("mqtt_entity.client.Client") as client:
         mmock = MagicMock()
@@ -161,5 +162,5 @@ async def test_connect(caplog):
         mmock.is_connected.assert_called()
 
         assert "Connection" not in caplog.text
-        _mqtt_on_connect(None, None, None, 1)
+        _mqtt_on_connect(client, None, None, 1)
         # assert "Connection" in caplog.text

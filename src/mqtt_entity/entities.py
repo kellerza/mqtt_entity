@@ -2,7 +2,7 @@
 
 import inspect
 import logging
-from typing import Any, Callable, Optional, Sequence, Union
+from typing import Any, Callable, Sequence
 
 import attrs
 from attrs import validators
@@ -14,21 +14,21 @@ _LOGGER = logging.getLogger(__name__)
 # pylint: disable=too-few-public-methods, too-many-instance-attributes
 
 
-@attrs.define
+@attrs.define()
 class Device:
     """A Home Assistant Device, used to group entities."""
 
-    identifiers: list[Union[str, tuple[str, Any]]] = attrs.field(
+    identifiers: list[str | tuple[str, Any]] = attrs.field(
         validator=[validators.instance_of(list), validators.min_len(1)]
     )
     connections: list[str] = attrs.field(factory=list)
-    configuration_url: str = attrs.field(default="")
-    manufacturer: str = attrs.field(default="")
-    model: str = attrs.field(default="")
-    name: str = attrs.field(default="")
-    suggested_area: str = attrs.field(default="")
-    sw_version: str = attrs.field(default="")
-    via_device: str = attrs.field(default="")
+    configuration_url: str = ""
+    manufacturer: str = ""
+    model: str = ""
+    name: str = ""
+    suggested_area: str = ""
+    sw_version: str = ""
+    via_device: str = ""
 
     @property
     def id(self) -> str:  # pylint: disable=invalid-name
@@ -36,35 +36,70 @@ class Device:
         return str(self.identifiers[0])
 
 
-@attrs.define
+@attrs.define()
 class Availability:
     """Represent Home Assistant entity availability."""
 
-    topic: str = attrs.field()
-    payload_available: str = attrs.field(default="online")
-    payload_not_available: str = attrs.field(default="offline")
-    value_template: str = attrs.field(default="")
+    topic: str
+    payload_available: str = "online"
+    payload_not_available: str = "offline"
+    value_template: str = ""
 
 
-@attrs.define
-class Entity:
+@attrs.define()
+class DiscoveryEntity:
+    """Base class for entities that support MQTT Discovery."""
+
+    @property
+    def discovery_topic(self) -> str:
+        """Discovery topic."""
+        raise NotImplementedError("Subclasses must implement discovery_topic")
+
+    @property
+    def asdict(self) -> dict[str, Any]:
+        """Represent the entity as a dictionary, without empty values and defaults."""
+
+        def _filter(atrb: attrs.Attribute, value: Any) -> bool:
+            if atrb.name in ("discovery_extra", "discovery_topic", "_path"):
+                return False
+            return (
+                bool(value) and atrb.default != value and not inspect.isfunction(value)
+            )
+
+        res = attrs.asdict(self, filter=_filter)
+
+        extra = getattr(self, "discovery_extra", None)
+        if extra:
+            keys = {
+                key: extra[key]
+                for key in extra
+                if key in res and res[key] != extra[key]
+            }
+            _LOGGER.debug("Overwriting %s", keys)
+            res.update(extra)
+
+        return res
+
+
+@attrs.define()
+class Entity(DiscoveryEntity):
     """A generic Home Assistant entity used as the base class for other entities."""
 
-    unique_id: str = attrs.field()
-    device: Device = attrs.field()
-    state_topic: str = attrs.field()
-    name: str = attrs.field()
+    unique_id: str
+    device: Device
+    state_topic: str
+    name: str
     availability: list[Availability] = attrs.field(factory=list)
-    availability_mode: str = attrs.field(default="")
-    device_class: str = attrs.field(default="")
-    unit_of_measurement: str = attrs.field(default="")
-    state_class: str = attrs.field(default="")
-    expire_after: int = attrs.field(default=0)
+    availability_mode: str = ""
+    device_class: str = ""
+    unit_of_measurement: str = ""
+    state_class: str = ""
+    expire_after: int = 0
     """Unavailable if not updated."""
-    enabled_by_default: bool = attrs.field(default=True)
-    entity_category: str = attrs.field(default="")
-    icon: str = attrs.field(default="")
-    json_attributes_topic: str = attrs.field(default="")
+    enabled_by_default: bool = True
+    entity_category: str = ""
+    icon: str = ""
+    json_attributes_topic: str = ""
     """Used by the set_attributes helper."""
 
     discovery_extra: dict[str, Any] = attrs.field(factory=dict)
@@ -80,26 +115,7 @@ class Entity:
             self.state_class = "total_increasing"
 
     @property
-    def asdict(self) -> dict[str, Any]:
-        """Represent the entity as a dictionary, without empty values and defaults."""
-
-        def _filter(atrb: attrs.Attribute, value: Any) -> bool:
-            if atrb.name == "discovery_extra":
-                return False
-            return (
-                bool(value) and atrb.default != value and not inspect.isfunction(value)
-            )
-
-        res = attrs.asdict(self, filter=_filter)
-        for key in self.discovery_extra:
-            if key in res and res[key] != self.discovery_extra[key]:
-                _LOGGER.debug("Overwriting %s with %s", key, self.discovery_extra[key])
-        res.update(self.discovery_extra)
-
-        return res
-
-    @property
-    def topic(self) -> str:
+    def discovery_topic(self) -> str:
         """Discovery topic."""
         uid, did = self.unique_id, self.device.id
         if uid.startswith(did):
@@ -107,24 +123,57 @@ class Entity:
         return f"homeassistant/{self._path}/{did}/{uid}/config"
 
 
-@attrs.define
+@attrs.define()
 class SensorEntity(Entity):
     """A Home Assistant Sensor entity."""
 
     _path = "sensor"
 
 
-@attrs.define
+@attrs.define()
 class BinarySensorEntity(Entity):
     """A Home Assistant Binary Sensor entity."""
 
-    payload_on: str = attrs.field(default=BOOL_ON)
-    payload_off: str = attrs.field(default=BOOL_OFF)
+    payload_on: str = BOOL_ON
+    payload_off: str = BOOL_OFF
 
     _path = "binary_sensor"
 
 
-@attrs.define
+@attrs.define()
+class DeviceTrigger(DiscoveryEntity):
+    """A Home Assistant Device trigger.
+
+    https://www.home-assistant.io/integrations/device_trigger.mqtt/
+    """
+
+    device: Device
+    topic: str
+    """Topic to publish the trigger to."""
+    subtype: str
+    payload: str
+
+    automation_type: str = "trigger"
+    type: str = "action"
+
+    _path = "device_automation"
+
+    discovery_extra: dict[str, Any] = attrs.field(factory=dict)
+    """Additional MQTT Discovery attributes."""
+
+    @property
+    def name(self) -> str:
+        """Return the name of the trigger."""
+        return f"{self.device.name} {self.payload}"
+
+    @property
+    def discovery_topic(self) -> str:
+        """Discovery topic."""
+        did = self.device.id
+        return f"homeassistant/{self._path}/{did}/action_{self.payload}/config"
+
+
+@attrs.define()
 class RWEntity(Entity):
     """Read/Write entity base class.
 
@@ -135,12 +184,12 @@ class RWEntity(Entity):
         default="", validator=(validators.instance_of(str), validators.min_len(2))
     )
 
-    on_change: Optional[Callable] = attrs.field(default=None)
+    on_change: Callable | None = None
 
     _path = "text"
 
 
-@attrs.define
+@attrs.define()
 class SelectEntity(RWEntity):
     """A HomeAssistant Select entity."""
 
@@ -149,23 +198,23 @@ class SelectEntity(RWEntity):
     _path = "select"
 
 
-@attrs.define
+@attrs.define()
 class SwitchEntity(RWEntity):
     """A Home Assistant Switch entity."""
 
-    payload_on: str = attrs.field(default=BOOL_ON)
-    payload_off: str = attrs.field(default=BOOL_OFF)
+    payload_on: str = BOOL_ON
+    payload_off: str = BOOL_OFF
 
     _path = "switch"
 
 
-@attrs.define
+@attrs.define()
 class NumberEntity(RWEntity):
     """A HomeAssistant Number entity."""
 
-    min: float = attrs.field(default=0.0)
-    max: float = attrs.field(default=100.0)
-    mode: str = attrs.field(default="auto")
-    step: float = attrs.field(default=1.0)
+    min: float = 0.0
+    max: float = 100.0
+    mode: str = "auto"
+    step: float = 1.0
 
     _path = "number"

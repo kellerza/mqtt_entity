@@ -4,11 +4,11 @@ import asyncio
 import inspect
 import logging
 from json import dumps
-from typing import Any, Callable, Coroutine, Optional, Sequence, Union
+from typing import Any, Callable, Coroutine, Sequence
 
 from paho.mqtt.client import Client, MQTTMessage  # type: ignore
 
-from mqtt_entity.entities import Availability, Entity
+from mqtt_entity.entities import Availability, DeviceTrigger, Entity
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -30,9 +30,9 @@ class MQTTClient:
         self,
         options: Any = None,
         *,
-        username: Optional[str] = None,
-        password: Optional[str] = None,
-        host: Optional[str] = None,
+        username: str | None = None,
+        password: str | None = None,
+        host: str | None = None,
         port: int = 1883,
     ) -> None:
         """Connect to MQTT server specified as attributes of the options."""
@@ -85,8 +85,8 @@ class MQTTClient:
 
     async def publish(
         self,
-        topic: Union[str, Entity],
-        payload: Optional[str],
+        topic: str | Entity | DeviceTrigger,
+        payload: str | None = None,
         qos: int = 0,
         retain: bool = False,
     ) -> None:
@@ -94,6 +94,9 @@ class MQTTClient:
         # async with self._paho_lock:
         if isinstance(topic, Entity):
             topic = topic.state_topic
+        if isinstance(topic, DeviceTrigger):
+            payload = topic.payload
+            topic = topic.topic
         if not isinstance(qos, int):
             qos = 0
         if retain:
@@ -106,7 +109,7 @@ class MQTTClient:
         )
 
     async def publish_discovery_info(
-        self, entities: Sequence[Entity], remove_entities: bool = True
+        self, entities: Sequence[Entity | DeviceTrigger], remove_entities: bool = True
     ) -> None:
         """Home Assistant MQTT discovery helper.
 
@@ -116,7 +119,9 @@ class MQTTClient:
         if not self._client.is_connected():
             raise ConnectionError()
 
-        await self.on_change_handler(entities=entities)
+        ent_only = [e for e in entities if isinstance(e, Entity)]
+
+        await self.on_change_handler(entities=ent_only)
 
         task_remove = None
         if remove_entities:
@@ -126,15 +131,25 @@ class MQTTClient:
             task_remove = asyncio.create_task(
                 self.remove_discovery_info(
                     device_ids=list(set(e.device.id for e in entities)),
-                    keep_topics=[e.topic for e in entities],
+                    keep_topics=[e.discovery_topic for e in entities],
                 )
             )
 
-        for ent in entities:
+        for ent in ent_only:
             if self.availability_topic and not ent.availability:
                 ent.availability = [Availability(topic=self.availability_topic)]
-            _LOGGER.debug("MQTT: Publish %s", ent.topic)
-            await self.publish(ent.topic, payload=dumps(ent.asdict), retain=True)
+            _LOGGER.debug("MQTT: Publish %s", ent.discovery_topic)
+            await self.publish(
+                ent.discovery_topic, payload=dumps(ent.asdict), retain=True
+            )
+
+        for edt in entities:
+            if not isinstance(edt, DeviceTrigger):
+                continue
+            _LOGGER.debug("MQTT: Publish trigger %s", edt.topic)
+            await self.publish(
+                edt.discovery_topic, payload=dumps(edt.asdict), retain=True
+            )
 
         await asyncio.sleep(0.01)
 
@@ -171,9 +186,7 @@ class MQTTClient:
         # self._client.on_message = None
         await self.on_change_handler()
 
-    async def on_change_handler(
-        self, entities: Optional[Sequence[Entity]] = None
-    ) -> None:
+    async def on_change_handler(self, entities: Sequence[Entity] | None = None) -> None:
         """Assign the MQTT on_message handler for entities' on_change."""
         _loop = asyncio.get_running_loop()
 

@@ -5,7 +5,7 @@ description = "MQTT client to manage Home Assistant entities via MQTT"
 authors = [{ name = "Johann Kellerman", email = "johann.kellerman@nokia.com" }]
 license = { file = "LICENSE" }
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 keywords = [
     "home-assistant",
     "mqtt",
