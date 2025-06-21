@@ -1,6 +1,17 @@
 # CHANGELOG
 
 
+## v0.1.1 (2025-06-21)
+
+### :dolphin:
+
+- :dolphin: build
+  ([`fa0a3a2`](https://github.com/kellerza/mqtt_entity/commit/fa0a3a2b18b7b22125dd9afb65dd86089f22ab61))
+
+- :dolphin: build
+  ([`ee982eb`](https://github.com/kellerza/mqtt_entity/commit/ee982eb515ed29b2362d64eb44ff9e891ed92e5c))
+
+
 ## v0.1.0 (2025-06-20)
 
 ### :rocket:
