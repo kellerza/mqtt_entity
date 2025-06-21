@@ -37,16 +37,14 @@ dev = [
 ]
 
 [build-system]
-requires = ["uv_build"]
+# https://docs.astral.sh/uv/concepts/build-backend/
+requires = ["uv_build>=0.7.13,<0.8.0"]
 build-backend = "uv_build"
 
 [tool.ruff]
 # Assume Python 3.11
-target-version = "py311"
+target-version = "py312"
 src = ["src", "test"]
-# pyflakes, pycodestyle, isort
-extend-exclude = [
-]
 
 [tool.ruff.format]
 quote-style = "double"
@@ -64,14 +62,14 @@ ignore = ["E203", "E501"]
 disallow_untyped_defs = true
 ignore_missing_imports = true
 warn_unused_configs = true
-exclude = ["src/rfr/modules", "build"]
+exclude = ["build"]
 
 [[tool.mypy.overrides]]
 module = "tests.*"
 disallow_untyped_defs = true
 
-[tool.pylint]
-extension-pkg-whitelist = ["orjson"]
+# [tool.pylint]
+# extension-pkg-whitelist = ["orjson"]
 
 # https://stackoverflow.com/questions/64162504/settings-for-pylint-in-setup-cfg-are-not-getting-used
 [tool.pylint.'MESSAGES CONTROL']
@@ -79,7 +77,6 @@ max-line-length = 120
 good-names = ["db", "fr", "cr", "k", "i", "ui", "si", "ri", "j"]
 enable = ["W", "E", "F"]
 disable = ["R", "unused-argument"]
-
 
 [tool.pylint.design]
 max-returns = 8
@@ -94,7 +91,6 @@ log_cli_level = "DEBUG"
 asyncio_mode = "auto"
 addopts = "--cov=src --cov-report xml:cov.xml"
 asyncio_default_fixture_loop_scope = "function"
-
 env = [
   "ENV=1",
 ]
@@ -109,7 +105,7 @@ vcs_release = true
 commit_parser = "emoji"
 # https://python-semantic-release.readthedocs.io/en/latest/configuration.html#version-toml
 version_toml = ["pyproject.toml:project.version"]
-build_command = "pip install uv && uv sync --frozen --all-extras && uv build"
+build_command = "uv sync --frozen --all-extras && uv build"
 commit_version_number = true
 
 # https://python-semantic-release.readthedocs.io/en/latest/multibranch_releases.html#configuring-multibranch-releases
