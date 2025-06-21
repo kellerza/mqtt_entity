@@ -6,21 +6,21 @@ A Python helper library to manage Home Assistant entities over MQTT.
 
 Features:
 
-- MQTT entity discovery info (persistent messages)
-- Option to remove persistent discovery info
-- Availability management
-- Manage entities per device
-- Entities modelled as classes
-- Supported entities:
+- MQTT client based on paho-mqtt
+- Manage MQTT discovery info (adding/removing entities)
+- MQTTDevice class to manage devices
+  - Availability management
+  - Manage entities per device
+- Entities modelled as classes:
   - Read-only: Sensor, BinarySensor
   - Read & write: Select, Switch, Number
+  - MQTT device event
 - Asyncio based
-
-MQTTClient based on paho-mqtt.
+- Helper for Home Assistant addon configuration (optional)
 
 ## Why?
 
-This MQTT code was included in several of my home Assistant addons (SMA-EM / Sunsynk) and finally decided to extract it in a separate library to leverage recent updates & features like discovery removal.
+This MQTT code was included in several of my home Assistant addons (SMA-EM / Sunsynk). It is easier to update a single library & add new features, like discovery removal.
 
 Alternatives options (not based on asyncio)
 

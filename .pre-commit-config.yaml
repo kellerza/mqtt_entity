@@ -22,7 +22,7 @@ repos:
       - id: mypy
         files: "^(mqtt_entity)/"
         #exclude: "x/x.py"
-        additional_dependencies: ["attrs>22"]
+        additional_dependencies: ["attrs"]
 
   - repo: local
     hooks:

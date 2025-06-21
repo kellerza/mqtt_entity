@@ -3,8 +3,8 @@ name: CI
 on: [push, pull_request]
 
 env:
-  RUFF_VERSION: 0.11.3
-  UV_VERSION: 0.7.8
+  RUFF_VERSION: 0.12.0
+  UV_VERSION: 0.7.13
   TEST_TARGET: "src"
 
 jobs:
@@ -106,11 +106,6 @@ jobs:
           fetch-depth: 0
           ref: ${{ github.sha }}
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@v6
-        with:
-          version: ${{ env.UV_VERSION }}
-
       - name: Setup | Force correct release branch on workflow sha
         run: |
           git checkout -B ${{ github.ref_name }} ${{ github.sha }}
@@ -118,11 +113,17 @@ jobs:
       - name: Action | Semantic Version Release
         id: release
         # Adjust tag with desired version if applicable.
-        uses: python-semantic-release/python-semantic-release@v9.21.1
+        uses: python-semantic-release/python-semantic-release@v10.1.0
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           git_committer_name: "github-actions"
           git_committer_email: "actions@users.noreply.github.com"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: ${{ env.UV_VERSION }}
+        if: steps.release.outputs.released == 'true'
 
       - name: Publish distribution 📦 to PyPI
         run: uv publish
