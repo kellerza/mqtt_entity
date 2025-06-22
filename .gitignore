@@ -134,3 +134,4 @@ dmypy.json
 # Vscode settings
 .vscode/
 
+.ruff_cache

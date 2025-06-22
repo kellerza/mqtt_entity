@@ -15,20 +15,16 @@ _LOGGER = logging.getLogger(__name__)
 
 
 @attrs.define()
-class Options:
+class AddonOptions:
     """HASS Addon Options."""
 
-    mqtt_host: str = "homeassistant.local"
-    mqtt_port: int = 1883
-    mqtt_username: str = ""
-    mqtt_password: str = ""
-    debug: int = 0
-
-    def load_dict(self, value: dict) -> None:
+    def load_dict(
+        self, value: dict, log_lvl: int = logging.DEBUG, log_msg: str = ""
+    ) -> None:
         """Structure and copy result to self."""
         try:
-            _LOGGER.debug("Loading config: %s", value)
-            val = CONVERTER.structure(value, Options)
+            _LOGGER.log(log_lvl, "%s: %s", log_msg or "Loading config", value)
+            val = CONVERTER.structure(value, self.__class__)
         except Exception as exc:
             msg = "Error loading config: " + "\n".join(transform_error(exc))
             _LOGGER.error(msg)
@@ -39,7 +35,9 @@ class Options:
     def load_env(self) -> bool:
         """Get attrs fields from the environment."""
         res = {}
-        atts: tuple[attrs.Attribute, ...] = attrs.fields(attrs.resolve_types(Options))
+        atts: tuple[attrs.Attribute, ...] = attrs.fields(
+            attrs.resolve_types(self.__class__)
+        )
         for att in atts:
             val = os.getenv(att.name.upper())
             if not val:
@@ -49,8 +47,11 @@ class Options:
                 continue
             res[att.name.lower()] = val
         if res:
-            _LOGGER.info("Loading config from environment variables: %s", res)
-            self.load_dict(res)
+            self.load_dict(
+                res,
+                logging.INFO,
+                "Loading config from environment variables",
+            )
         return bool(res)
 
     def init_addon(self) -> None:
@@ -80,7 +81,7 @@ class Options:
                 opt = load(fptr) if fpath.suffix == ".json" else safe_load(fptr)
                 self.load_dict(opt)
 
-        if self.debug != 0:
+        if getattr(self, "debug", 0):
             logging.basicConfig(
                 format="%(asctime)s %(levelname)-7s %(name)s %(message)s",
                 level=logging.DEBUG,
@@ -88,7 +89,15 @@ class Options:
             )
 
 
-OPT = Options()
+@attrs.define()
+class MQTTOptions(AddonOptions):
+    """MQTT Options for HASS Addon."""
+
+    mqtt_host: str = "homeassistant.local"
+    mqtt_port: int = 1883
+    mqtt_username: str = ""
+    mqtt_password: str = ""
+
 
 CONVERTER = Converter(forbid_extra_keys=True)
 
