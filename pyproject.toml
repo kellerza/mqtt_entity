@@ -5,7 +5,7 @@ description = "MQTT client to manage Home Assistant entities via MQTT"
 authors = [{ name = "Johann Kellerman", email = "johann.kellerman@nokia.com" }]
 license = { file = "LICENSE" }
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 keywords = [
     "home-assistant",
     "mqtt",
@@ -45,7 +45,7 @@ build-backend = "uv_build"
 source-exclude = [".mypy_cache", "tests"]
 
 [tool.ruff]
-# Assume Python 3.11
+# Assume Python 3.12
 target-version = "py312"
 src = ["src", "test"]
 

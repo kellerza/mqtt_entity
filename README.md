@@ -49,7 +49,7 @@ git commit -m ":rocket: Release 0.x.0"
 
 ### Development
 
-To run the tests, you need to have Python 3.11+ installed.
+To run the tests, you need to have Python 3.12+ installed.
 
 The `--mqtt` connects to a live HomeAssistant instance using the MQTT broker.
 
