@@ -158,6 +158,12 @@ class MQTTClient:
         Publish discovery topics on "homeassistant/device/{device_id}/{sensor_id}/config"
         Publish discovery topics on "homeassistant/(sensor|switch)/{device_id}/{sensor_id}/config"
         """
+        if self.migrate_entities:
+            _LOGGER.debug("MQTT: Migrate entities")
+            await self.clean_entity_based_cb(migrate=True)
+        else:
+            await self.clean_entity_based_cb(remove=True)
+        await asyncio.sleep(1)
 
         for ddev in self.devs:
             disco_topic, dico_dict = ddev.discovery_info(
@@ -172,14 +178,6 @@ class MQTTClient:
             for topic, cbk in tcb.items():
                 self.topic_subscribe(topic, cbk)
 
-        await asyncio.sleep(0.01)
-
-        if self.migrate_entities:
-            _LOGGER.debug("MQTT: Migrate entities")
-            await self.clean_entity_based_cb(migrate=True)
-        else:
-            await self.clean_entity_based_cb(remove=True)
-
     async def clean_entity_based_cb(
         self, *, migrate: bool = False, remove: bool = False
     ) -> None:
@@ -191,10 +189,10 @@ class MQTTClient:
                 return
             payload = mqtt_loads(payload_s)
             _LOGGER.info("MQTT MIGRATE topic %s with payload %s", topic, payload)
-            migrate_ok = payload == {"migrate": True}
-            _pl = None if migrate_ok else dumps({"migrate": True})
+            migrate_ok = payload == {"migrate_discovery": True}
+            _pl = None if migrate_ok else dumps({"migrate_discovery": True})
             if migrate_ok:
-                await asyncio.sleep(1)
+                await asyncio.sleep(5)
             await self.publish(topic=topic, payload=_pl, qos=1, retain=True)
 
         def cb_remove(dev: MQTTDevice) -> TopicCallback:
