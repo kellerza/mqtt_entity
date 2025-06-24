@@ -1,10 +1,5 @@
 """pytest configuration for the tests."""
 
-import os
-import sys
-from importlib import import_module as _import_module
-from pathlib import Path
-from types import ModuleType
 from typing import Any
 
 import pytest
@@ -38,14 +33,3 @@ def pytest_collection_modifyitems(config: Any, items: Any) -> None:
             for item in items:
                 if mrk in item.keywords:
                     item.add_marker(skip_mrk)
-
-
-def import_module(mod_name: str, folder: str) -> ModuleType:
-    """import_module."""
-    here = Path(os.getcwd()) / folder
-    sys.path.insert(0, str(here))
-    try:
-        mod_obj = _import_module(mod_name)
-        return mod_obj
-    finally:
-        sys.path.pop(0)

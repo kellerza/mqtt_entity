@@ -1,31 +1,51 @@
 """MQTTClient."""
 
 import asyncio
+import importlib.metadata
 import inspect
 import logging
-from json import dumps
-from typing import Any, Callable, Coroutine, Sequence
+import sys
+from json import dumps, loads
+from json.decoder import JSONDecodeError
+from typing import Any
 
+import attrs
 from paho.mqtt.client import Client, MQTTMessage
+from paho.mqtt.enums import CallbackAPIVersion
 from paho.mqtt.reasoncodes import ReasonCode
 
-from mqtt_entity.entities import Availability, DeviceTrigger, Entity
+from .device import MQTTDevice, MQTTOrigin, TopicCallback
+from .entities import MQTTDeviceTrigger, MQTTEntity
 
 _LOGGER = logging.getLogger(__name__)
 
 
-TopicCallback = Callable[[float | int | str | bool], None | Coroutine[Any, Any, None]]
-
-
+@attrs.define()
 class MQTTClient:
     """Basic MQTT Client."""
 
+    devs: list[MQTTDevice]
     availability_topic: str = ""
-    topic_on_change: dict[str, TopicCallback] = {}
+    origin: MQTTOrigin = attrs.field(
+        factory=lambda: MQTTOrigin(
+            name="mqtt-entity", sw_version=importlib.metadata.version("mqtt-entity")
+        )
+    )
+    client: Client = attrs.field(init=False, repr=False)
+    topics_subscribed: set[str] = attrs.field(init=False, repr=False)
+    """All topic we subscribed to."""
+    migrate_entities: bool = attrs.field(default=True)
+    """Migrate entities on discovery info publish. Else remove them."""
 
-    def __init__(self) -> None:
+    def __attrs_post_init__(self) -> None:
         """Init MQTT Client."""
-        self._client = Client()
+        self.topics_subscribed = set()
+        self.client = Client(
+            callback_api_version=CallbackAPIVersion.VERSION2,
+            client_id=self.origin.name,
+        )
+        self.client.on_connect = _mqtt_on_connect
+        self.client.on_message = _mqtt_on_message
 
     async def connect(
         self,
@@ -37,27 +57,26 @@ class MQTTClient:
         port: int = 1883,
     ) -> None:
         """Connect to MQTT server specified as attributes of the options."""
-        if self._client.is_connected():
+        if self.client.is_connected():
             return
         # Disconnect so that we trigger "Connection Successful" on re-connect
         await self.disconnect()
-        self._client.on_connect = _mqtt_on_connect
 
         username = getattr(options, "mqtt_username", username)
         password = getattr(options, "mqtt_password", password)
         host = getattr(options, "mqtt_host", host)
         port = getattr(options, "mqtt_port", port)
-        self._client.username_pw_set(username=username, password=password)
+        self.client.username_pw_set(username=username, password=password)
 
         if self.availability_topic:
-            self._client.will_set(self.availability_topic, "offline", retain=True)
+            self.client.will_set(self.availability_topic, "offline", retain=True)
 
         _LOGGER.info("MQTT: Connecting to %s@%s:%s", username, host, port)
-        self._client.connect_async(host=host, port=port)
-        self._client.loop_start()
+        self.client.connect_async(host=host, port=port)
+        self.client.loop_start()
 
         retry = 10
-        while retry and not self._client.is_connected():
+        while retry and not self.client.is_connected():
             await asyncio.sleep(0.5)
             retry -= 0
         if not retry:
@@ -67,35 +86,32 @@ class MQTTClient:
         # publish online (Last will sets offline on disconnect)
         if self.availability_topic:
             await self.publish(self.availability_topic, "online", retain=True)
+
         # Ensure we subscribe all existing change handlers (after a reconnect)
-        if self.topic_on_change:
-            _LOGGER.debug(
-                "MQTT: Re-subscribe to %s", ", ".join(self.topic_on_change.keys())
-            )
-            for topic in self.topic_on_change:
-                self._client.subscribe(topic)
+        for topic in self.topics_subscribed:
+            self.client.subscribe(topic)
 
     async def disconnect(self) -> None:
         """Stop the MQTT client."""
 
         def _stop() -> None:
-            # Do not disconnect, we want the broker to always publish will
-            self._client.loop_stop()
+            """Do not disconnect, we want the broker to always publish will."""
+            self.client.loop_stop()
 
         await asyncio.get_running_loop().run_in_executor(None, _stop)
 
     async def publish(
         self,
-        topic: str | Entity | DeviceTrigger,
+        topic: str | MQTTEntity | MQTTDeviceTrigger,
         payload: str | None = None,
         qos: int = 0,
         retain: bool = False,
     ) -> None:
         """Publish a MQTT message."""
         # async with self._paho_lock:
-        if isinstance(topic, Entity):
+        if isinstance(topic, MQTTEntity):
             topic = topic.state_topic
-        if isinstance(topic, DeviceTrigger):
+        if isinstance(topic, MQTTDeviceTrigger):
             payload = topic.payload
             topic = topic.topic
         if not isinstance(qos, int):
@@ -106,115 +122,155 @@ class MQTTClient:
             "MQTT: Publish %s%s %s, %s", qos, "R" if retain else "", topic, payload
         )
         await asyncio.get_running_loop().run_in_executor(
-            None, self._client.publish, topic, payload, qos, bool(retain)
+            None, self.client.publish, topic, payload, qos, bool(retain)
         )
 
-    async def publish_discovery_info(
-        self, entities: Sequence[Entity | DeviceTrigger], remove_entities: bool = True
-    ) -> None:
+    def publish_discovery_info(self) -> None:
+        """Publish discovery info if HA is online."""
+
+        async def _timeout() -> None:
+            """Timeout for Home Assistant online check."""
+            _LOGGER.error(
+                "MQTT: Home Assistant not online. Topic homeassistant/status is empty"
+            )
+            sys.exit(1)
+
+        timeout = asyncio.get_running_loop().call_later(10, _timeout)
+
+        async def _online_cb(payload_s: str) -> None:
+            """Republish discovery info."""
+            if payload_s != "online":
+                _LOGGER.warning(
+                    "MQTT: Home Assistant offline. homeassistant/status = %s",
+                    payload_s,
+                )
+                return
+
+            timeout.cancel()
+            timeout.cancel()
+            _LOGGER.info("MQTT: Home Assistant online. Publish discovery info.")
+            await self._publish_discovery_info()
+
+        if not self.client.is_connected():
+            raise ConnectionError()
+
+        self.topic_subscribe("homeassistant/status", _online_cb)
+
+    async def _publish_discovery_info(self) -> None:
         """Home Assistant MQTT discovery helper.
 
         https://www.home-assistant.io/docs/mqtt/discovery/
+        Publish discovery topics on "homeassistant/device/{device_id}/{sensor_id}/config"
         Publish discovery topics on "homeassistant/(sensor|switch)/{device_id}/{sensor_id}/config"
         """
-        if not self._client.is_connected():
-            raise ConnectionError()
 
-        ent_only = [e for e in entities if isinstance(e, Entity)]
-
-        await self.on_change_handler(entities=ent_only)
-
-        task_remove = None
-        if remove_entities:
-            _LOGGER.debug(
-                "MQTT: Remove entities %s", [e.name if e else str(e) for e in entities]
+        for ddev in self.devs:
+            disco_topic, dico_dict = ddev.discovery_info(
+                self.availability_topic, origin=self.origin
             )
-            task_remove = asyncio.create_task(
-                self.remove_discovery_info(
-                    device_ids=list(set(e.device.id for e in entities)),
-                    keep_topics=[e.discovery_topic for e in entities],
-                )
-            )
+            await self.publish(disco_topic, payload=dumps(dico_dict))
 
-        for ent in ent_only:
-            if self.availability_topic and not ent.availability:
-                ent.availability = [Availability(topic=self.availability_topic)]
-            _LOGGER.debug("MQTT: Publish %s", ent.discovery_topic)
-            await self.publish(
-                ent.discovery_topic, payload=dumps(ent.asdict), retain=True
-            )
-
-        for edt in entities:
-            if not isinstance(edt, DeviceTrigger):
-                continue
-            _LOGGER.debug("MQTT: Publish trigger %s", edt.topic)
-            await self.publish(
-                edt.discovery_topic, payload=dumps(edt.asdict), retain=True
-            )
+            # add topic callbacks
+            tcb: dict[str, TopicCallback] = {}
+            for ent in ddev.components.values():
+                ent.topic_callbacks(tcb)
+            for topic, cbk in tcb.items():
+                self.topic_subscribe(topic, cbk)
 
         await asyncio.sleep(0.01)
 
-        if task_remove:
-            await task_remove
+        if self.migrate_entities:
+            _LOGGER.debug("MQTT: Migrate entities")
+            await self.clean_entity_based_cb(migrate=True)
+        else:
+            await self.clean_entity_based_cb(remove=True)
 
-    async def remove_discovery_info(
-        self, device_ids: Sequence[str], keep_topics: Sequence[str], sleep: float = 0.5
+    async def clean_entity_based_cb(
+        self, *, migrate: bool = False, remove: bool = False
     ) -> None:
         """Remove previously discovered entities."""
 
-        def __on_message(client: Client, _userdata: Any, message: MQTTMessage) -> None:
-            if not message.retain:
+        async def cb_migrate(payload_s: str, topic: str) -> None:
+            """Callback to remove the device."""
+            if not payload_s:
                 return
-            topic = str(message.topic)
-            device = topic.split("/")[-3]
-            _LOGGER.debug("MQTT: Rx retained msg: topic=%s -- device=%s", topic, device)
-            if device not in device_ids or topic in keep_topics:
-                return
-            _LOGGER.info("MQTT: Removing HASS MQTT discovery info %s", topic)
-            # Not in the event loop, execute directly
-            client.publish(topic=topic, payload=None, qos=1, retain=True)
+            payload = mqtt_loads(payload_s)
+            _LOGGER.info("MQTT MIGRATE topic %s with payload %s", topic, payload)
+            migrate_ok = payload == {"migrate": True}
+            _pl = None if migrate_ok else dumps({"migrate": True})
+            if migrate_ok:
+                await asyncio.sleep(1)
+            await self.publish(topic=topic, payload=_pl, qos=1, retain=True)
 
-        self._client.on_message = __on_message
+        def cb_remove(dev: MQTTDevice) -> TopicCallback:
+            """Create a callback for the device."""
 
-        subs = [f"homeassistant/+/{did}/+/config" for did in device_ids]
-        for sub in subs:
-            self._client.subscribe(sub)
-        await asyncio.sleep(sleep)  # Wait for all retained messages to be reported
-        for sub in subs:
-            self._client.unsubscribe(sub)
+            async def _cb_remove(payload_s: str, topic: str) -> None:
+                if not payload_s:
+                    return
+                payload = mqtt_loads(payload_s)
+                # if not part of this device, remove the topic
+                if not isinstance(payload, dict) or "unique_id" not in payload:
+                    _LOGGER.warning(
+                        "MQTT CLEAN: No unique_id in payload %s, cannot remove", payload
+                    )
+                    return
+                uid = payload["unique_id"]
+                if uid not in dev.components:
+                    _LOGGER.info("MQTT: Removing unique ID %s", uid)
+                    self.client.publish(topic=topic, payload=None, qos=1, retain=True)
 
-        # re-assign the correct on_message handler
-        # self._client.on_message = None
-        await self.on_change_handler()
+            return _cb_remove
 
-    async def on_change_handler(self, entities: Sequence[Entity] | None = None) -> None:
-        """Assign the MQTT on_message handler for entities' on_change."""
-        _loop = asyncio.get_running_loop()
+        for dev in self.devs:
+            topic = f"homeassistant/+/{dev.id}/+/config"
+            self.topic_subscribe(topic, cb_migrate if migrate else cb_remove(dev))
+            asyncio.get_running_loop().call_later(10, self.topic_unsubscribe, topic)
 
-        def _on_change_handler(
-            _client: Client, _userdata: Any, message: MQTTMessage
-        ) -> None:
-            handler = self.topic_on_change.get(str(message.topic))
-            if not handler:
-                return
+    def topic_unsubscribe(self, topic: str) -> None:
+        """Remove a topic from the topic callbacks."""
+        self.client.unsubscribe(topic)
+        self.client.message_callback_remove(topic)
+        self.topics_subscribed.discard(topic)
+
+    def topic_subscribe(self, topic: str, callback: TopicCallback) -> None:
+        """Add a topic to the topic callbacks."""
+
+        paramc = len(inspect.signature(callback).parameters)
+        loop = asyncio.get_running_loop()
+
+        def cb(_client: Client, _userdata: Any, message: MQTTMessage) -> None:
+            """Callback for the topic."""
             payload = message.payload.decode("utf-8")
-            if inspect.iscoroutinefunction(handler):
-                coro = handler(payload)
-                _loop.call_soon_threadsafe(lambda: _loop.create_task(coro))
+            _LOGGER.debug(
+                "MQTT Callback for topic %s, payload %s",
+                message.topic,
+                payload or '""',
+            )
+            args = (payload,) if paramc == 1 else (payload, message.topic)
+            if inspect.iscoroutinefunction(callback):
+                coro = callback(*args)
+                loop.call_soon_threadsafe(lambda: loop.create_task(coro))
             else:
-                handler(payload)
+                callback(*args)
 
-        self._client.on_message = _on_change_handler
+        _LOGGER.debug("MQTT add callback for topic %s", topic)
+        self.client.subscribe(topic)
+        self.client.message_callback_add(topic, cb)
+        self.topics_subscribed.add(topic)
 
-        if not entities:
-            return
 
-        for ent in entities:
-            handler = getattr(ent, "on_change", None)
-            topic = getattr(ent, "command_topic", None)
-            if topic and handler:
-                self.topic_on_change[topic] = handler
-                self._client.subscribe(topic)
+def mqtt_loads(msg: str) -> dict[str, Any] | str:
+    """Load a JSON string into a dictionary."""
+    if msg is None:
+        return {}
+    try:
+        res = loads(msg)
+        if isinstance(res, dict):
+            return res
+    except JSONDecodeError:
+        pass
+    return str(msg)
 
 
 def _mqtt_on_connect(
@@ -239,3 +295,16 @@ def _mqtt_on_connect(
     #     mqttc.CONNACK_REFUSED_NOT_AUTHORIZED: "refused - not authorised",
     # }.get(_rc, f"refused - {_rc}")
     # _LOGGER.info("MQTT: Connection %s", msg)
+
+
+def _mqtt_on_message(
+    _client: Client,
+    _userdata: Any,
+    message: MQTTMessage,
+) -> None:
+    """MQTT on_message callback."""
+    topic = message.topic
+    payload = message.payload.decode("utf-8")
+    _LOGGER.warning(
+        "MQTT: Unhandled msg received on topic %s with payload %s", topic, payload
+    )

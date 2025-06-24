@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from mqtt_entity import Device, SensorEntity
+from mqtt_entity import MQTTSensorEntity
 from mqtt_entity.helpers import hass_default_rw_icon, hass_device_class, set_attributes
 
 
@@ -17,11 +17,9 @@ def test_helpers() -> None:
 @pytest.mark.asyncio
 async def test_set_attributes() -> None:
     """Test set_attributes."""
-    dev = Device(identifiers=["test123"])
-    e = SensorEntity(
+    e = MQTTSensorEntity(
         json_attributes_topic="blah",
         unique_id="a1",
-        device=dev,
         state_topic="/st",
         name="test1",
     )

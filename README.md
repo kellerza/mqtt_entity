@@ -44,3 +44,13 @@ git commit -m ":dolphin: Release 0.0.x"
 # Minor
 git commit -m ":rocket: Release 0.x.0"
 ```
+
+### Development
+
+To run the tests, you need to have Python 3.11+ installed.
+
+The `--mqtt` connects to a live HomeAssistant instance using the MQTT broker.
+
+```bash
+uv run pytest --mqtt
+```

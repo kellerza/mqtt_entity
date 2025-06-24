@@ -7,7 +7,7 @@ from json import dumps
 
 if typing.TYPE_CHECKING:
     from mqtt_entity.client import MQTTClient
-    from mqtt_entity.entities import Entity
+    from mqtt_entity.entities import MQTTEntity
 
 
 def hass_default_rw_icon(*, unit: str) -> str:
@@ -39,7 +39,7 @@ def hass_device_class(*, unit: str) -> str:
 async def set_attributes(
     attributes: dict[str, typing.Any],
     *,
-    entity: Entity,
+    entity: MQTTEntity,
     client: MQTTClient,
     retain: bool = False,
 ) -> None:

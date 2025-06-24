@@ -1,17 +1,14 @@
 """mqtt_entity library."""
 
 from mqtt_entity.client import MQTTClient  # noqa
+from mqtt_entity.device import MQTTDevice, MQTTOrigin  # noqa
 from mqtt_entity.entities import (  # noqa
-    Availability,
-    BinarySensorEntity,
-    Device,
-    Entity,
-    NumberEntity,
-    RWEntity,
-    SelectEntity,
-    SensorEntity,
-    SwitchEntity,
-    DeviceTrigger,
+    MQTTBinarySensorEntity,
+    MQTTEntity,
+    MQTTNumberEntity,
+    MQTTRWEntity,
+    MQTTSelectEntity,
+    MQTTSensorEntity,
+    MQTTSwitchEntity,
+    MQTTDeviceTrigger,
 )
-
-VERSION = "0.0.5"

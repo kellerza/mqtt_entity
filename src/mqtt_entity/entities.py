@@ -1,13 +1,13 @@
 """MQTT entities."""
 
-import inspect
 import logging
 from typing import Any, Callable, Sequence
 
 import attrs
 from attrs import validators
 
-from mqtt_entity.utils import BOOL_OFF, BOOL_ON, required
+from .device import MQTTBaseEntity, TopicCallback
+from .utils import BOOL_OFF, BOOL_ON, required
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -15,86 +15,16 @@ _LOGGER = logging.getLogger(__name__)
 
 
 @attrs.define()
-class Device:
-    """A Home Assistant Device, used to group entities."""
-
-    identifiers: list[str | tuple[str, Any]] = attrs.field(
-        validator=[validators.instance_of(list), validators.min_len(1)]
-    )
-    connections: list[str] = attrs.field(factory=list)
-    configuration_url: str = ""
-    manufacturer: str = ""
-    model: str = ""
-    name: str = ""
-    suggested_area: str = ""
-    sw_version: str = ""
-    via_device: str = ""
-
-    @property
-    def id(self) -> str:  # pylint: disable=invalid-name
-        """The device identifier."""
-        return str(self.identifiers[0])
-
-
-@attrs.define()
-class Availability:
-    """Represent Home Assistant entity availability."""
-
-    topic: str
-    payload_available: str = "online"
-    payload_not_available: str = "offline"
-    value_template: str = ""
-
-
-@attrs.define()
-class DiscoveryEntity:
-    """Base class for entities that support MQTT Discovery."""
-
-    @property
-    def discovery_topic(self) -> str:
-        """Discovery topic."""
-        raise NotImplementedError("Subclasses must implement discovery_topic")
-
-    def discovery_final(self, result: dict[str, Any]) -> None:
-        """Return the final discovery dictionary."""
-
-    @property
-    def asdict(self) -> dict[str, Any]:
-        """Represent the entity as a dictionary, without empty values and defaults."""
-
-        def _filter(atrb: attrs.Attribute, value: Any) -> bool:
-            if atrb.name in ("discovery_extra", "discovery_topic", "_path"):
-                return False
-            return (
-                bool(value) and atrb.default != value and not inspect.isfunction(value)
-            )
-
-        res = attrs.asdict(self, filter=_filter)
-
-        extra = getattr(self, "discovery_extra", None)
-        if extra:
-            keys = {
-                key: extra[key]
-                for key in extra
-                if key in res and res[key] != extra[key]
-            }
-            _LOGGER.debug("Overwriting %s", keys)
-            res.update(extra)
-
-        self.discovery_final(res)
-        return res
-
-
-@attrs.define()
-class Entity(DiscoveryEntity):
+class MQTTEntity(MQTTBaseEntity):
     """A generic Home Assistant entity used as the base class for other entities."""
 
     unique_id: str
-    device: Device
+    # device: MQTTDevice
     state_topic: str
     name: str
-    availability: list[Availability] = attrs.field(factory=list)
-    availability_mode: str = ""
+    object_id: str = ""
+    # availability: list[MQTTAvailability] = attrs.field(factory=list)
+    # availability_mode: str = ""
     device_class: str = ""
     unit_of_measurement: str = ""
     state_class: str = ""
@@ -102,6 +32,7 @@ class Entity(DiscoveryEntity):
     """Unavailable if not updated."""
     enabled_by_default: bool = True
     entity_category: str = ""
+    entity_picture: str = ""
     icon: str = ""
     json_attributes_topic: str = ""
     """Used by the set_attributes helper."""
@@ -118,24 +49,75 @@ class Entity(DiscoveryEntity):
         if not self.state_class and self.device_class == "energy":
             self.state_class = "total_increasing"
 
+
+@attrs.define()
+class MQTTDeviceTrigger(MQTTBaseEntity):
+    """A Home Assistant Device trigger.
+
+    https://www.home-assistant.io/integrations/device_trigger.mqtt/
+    """
+
+    type: str
+    subtype: str
+    payload: str
+    topic: str
+
+    _path = "device_automation"
+
     @property
-    def discovery_topic(self) -> str:
-        """Discovery topic."""
-        uid, did = self.unique_id, self.device.id
-        if uid.startswith(did):
-            uid = uid[len(did) :].strip("_")
-        return f"homeassistant/{self._path}/{did}/{uid}/config"
+    def name(self) -> str:
+        """Return the name of the trigger."""
+        return f"{self.type} {self.subtype}".strip()
+
+    discovery_extra: dict[str, Any] = attrs.field(factory=dict)
+    """Additional MQTT Discovery attributes."""
+
+    def discovery_dict(self, result: dict[str, Any]) -> None:
+        """Return the final discovery dictionary."""
+        super().discovery_dict(result)
+        result["automation_type"] = "trigger"
+        result["platform"] = "device_automation"
+
+    on_trigger: Callable | None = None
+    """Callable to call when triggered."""
+
+    def topic_callbacks(self, result: dict[str, TopicCallback]) -> None:
+        """Return a dictionary of topic callbacks."""
+        super().topic_callbacks(result)
+        if self.topic and self.on_trigger:
+            result[self.topic] = self.on_trigger
 
 
 @attrs.define()
-class SensorEntity(Entity):
+class MQTTRWEntity(MQTTEntity):
+    """Read/Write entity base class.
+
+    This will default to a text entity.
+    """
+
+    command_topic: str = attrs.field(
+        default="", validator=(validators.instance_of(str), validators.min_len(2))
+    )
+    on_change: Callable | None = None
+
+    _path = "text"
+
+    def topic_callbacks(self, result: dict[str, TopicCallback]) -> None:
+        """Return a dictionary of topic callbacks."""
+        super().topic_callbacks(result)
+        if self.command_topic and self.on_change:
+            result[self.command_topic] = self.on_change
+
+
+@attrs.define()
+class MQTTSensorEntity(MQTTEntity):
     """A Home Assistant Sensor entity."""
 
     _path = "sensor"
 
 
 @attrs.define()
-class BinarySensorEntity(Entity):
+class MQTTBinarySensorEntity(MQTTEntity):
     """A Home Assistant Binary Sensor entity."""
 
     payload_on: str = BOOL_ON
@@ -145,59 +127,7 @@ class BinarySensorEntity(Entity):
 
 
 @attrs.define()
-class DeviceTrigger(DiscoveryEntity):
-    """A Home Assistant Device trigger.
-
-    https://www.home-assistant.io/integrations/device_trigger.mqtt/
-    """
-
-    device: Device
-    """Topic to publish the trigger to."""
-    type: str
-    subtype: str
-    payload: str
-    topic: str
-
-    _path = "device_automation"
-
-    def discovery_final(self, result: dict[str, Any]) -> None:
-        """Return the final discovery dictionary."""
-        result["automation_type"] = "trigger"
-        result["platform"] = "device_automation"
-
-    discovery_extra: dict[str, Any] = attrs.field(factory=dict)
-    """Additional MQTT Discovery attributes."""
-
-    @property
-    def name(self) -> str:
-        """Return the name of the trigger."""
-        return f"{self.device.name} {self.type} {self.subtype}".strip()
-
-    @property
-    def discovery_topic(self) -> str:
-        """Discovery topic."""
-        did = self.device.id
-        return f"homeassistant/{self._path}/{did}/{self.type}_{self.subtype}/config"
-
-
-@attrs.define()
-class RWEntity(Entity):
-    """Read/Write entity base class.
-
-    This will default to a text entity.
-    """
-
-    command_topic: str = attrs.field(
-        default="", validator=(validators.instance_of(str), validators.min_len(2))
-    )
-
-    on_change: Callable | None = None
-
-    _path = "text"
-
-
-@attrs.define()
-class SelectEntity(RWEntity):
+class MQTTSelectEntity(MQTTRWEntity):
     """A HomeAssistant Select entity."""
 
     options: Sequence[str] = attrs.field(default=None, validator=required)
@@ -206,7 +136,7 @@ class SelectEntity(RWEntity):
 
 
 @attrs.define()
-class SwitchEntity(RWEntity):
+class MQTTSwitchEntity(MQTTRWEntity):
     """A Home Assistant Switch entity."""
 
     payload_on: str = BOOL_ON
@@ -216,7 +146,47 @@ class SwitchEntity(RWEntity):
 
 
 @attrs.define()
-class NumberEntity(RWEntity):
+class MQTTText(MQTTRWEntity):
+    """A Home Assistant Switch entity."""
+
+    _path = "text"
+
+
+@attrs.define()
+class MQTTLightEntity(MQTTRWEntity):
+    """A Home Assistant Switch entity."""
+
+    payload_on: str = BOOL_ON
+    payload_off: str = BOOL_OFF
+
+    brightness_state_topic: str = ""
+    brightness_command_topic: str = ""
+    on_brightness_change: TopicCallback | None = None
+
+    effect_state_topic: str = ""
+    effect_command_topic: str = ""
+    on_effect_change: TopicCallback | None = None
+    effect_list: list[str] | None = None
+
+    hs_state_topic: str = ""
+    hs_command_topic: str = ""
+    on_hs_change: TopicCallback | None = None
+
+    _path = "light"
+
+    def topic_callbacks(self, result: dict[str, TopicCallback]) -> None:
+        """Return a dictionary of topic callbacks."""
+        super().topic_callbacks(result)
+        if self.brightness_command_topic and self.on_brightness_change:
+            result[self.brightness_command_topic] = self.on_brightness_change
+        if self.effect_command_topic and self.on_effect_change:
+            result[self.effect_command_topic] = self.on_effect_change
+        if self.hs_command_topic and self.on_hs_change:
+            result[self.hs_command_topic] = self.on_hs_change
+
+
+@attrs.define()
+class MQTTNumberEntity(MQTTRWEntity):
     """A HomeAssistant Number entity."""
 
     min: float = 0.0

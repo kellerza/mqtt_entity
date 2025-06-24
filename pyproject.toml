@@ -92,7 +92,9 @@ asyncio_mode = "auto"
 addopts = "--cov=src --cov-report xml:cov.xml"
 asyncio_default_fixture_loop_scope = "function"
 env = [
-  "ENV=1",
+  "MQTT_HOST=192.168.1.8",
+  "MQTT_PASSWORD=hass123",
+  "MQTT_USERNAME=hass",
 ]
 
 [tool.setuptools.package-data]
