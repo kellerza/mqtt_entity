@@ -4,6 +4,8 @@
 
 A Python helper library to manage Home Assistant entities over MQTT.
 
+Updated for device based MQTT discovery.
+
 Features:
 
 - MQTT client based on paho-mqtt
