@@ -1,7 +1,9 @@
 """MQTT entities."""
 
-import logging
-from typing import Any, Callable, Sequence
+from __future__ import annotations
+
+from json import dumps
+from typing import TYPE_CHECKING, Any, Callable, Sequence
 
 import attrs
 from attrs import validators
@@ -9,7 +11,8 @@ from attrs import validators
 from .device import MQTTBaseEntity, TopicCallback
 from .utils import BOOL_OFF, BOOL_ON, required
 
-_LOGGER = logging.getLogger(__name__)
+if TYPE_CHECKING:
+    from .client import MQTTClient
 
 # pylint: disable=too-few-public-methods, too-many-instance-attributes
 
@@ -42,6 +45,20 @@ class MQTTEntity(MQTTBaseEntity):
 
     _path = ""
 
+    async def send_state(
+        self, client: MQTTClient, payload: str, *, retain: bool = False
+    ) -> None:
+        """Publish the state to the MQTT state topic."""
+        await client.publish(self.state_topic, payload, retain=retain)
+
+    async def send_json_attributes(
+        self, client: MQTTClient, attributes: dict[str, Any], *, retain: bool = True
+    ) -> None:
+        """Publish the attributes to the MQTT attributes topic."""
+        await client.publish(
+            topic=self.json_attributes_topic, payload=dumps(attributes), retain=retain
+        )
+
     def __attrs_post_init__(self) -> None:
         """Init the class."""
         if not self._path:
@@ -69,6 +86,10 @@ class MQTTDeviceTrigger(MQTTBaseEntity):
         """Return the name of the trigger."""
         return f"{self.type} {self.subtype}".strip()
 
+    async def send_trigger(self, client: MQTTClient) -> None:
+        """Publish the state to the MQTT state topic."""
+        await client.publish(self.topic, self.payload or "1")
+
     discovery_extra: dict[str, Any] = attrs.field(factory=dict)
     """Additional MQTT Discovery attributes."""
 
@@ -78,14 +99,14 @@ class MQTTDeviceTrigger(MQTTBaseEntity):
         result["automation_type"] = "trigger"
         result["platform"] = "device_automation"
 
-    on_trigger: Callable | None = None
-    """Callable to call when triggered."""
+    # on_trigger: Callable | None = None
+    # """Callable to call when triggered."""
 
-    def topic_callbacks(self, result: dict[str, TopicCallback]) -> None:
-        """Return a dictionary of topic callbacks."""
-        super().topic_callbacks(result)
-        if self.topic and self.on_trigger:
-            result[self.topic] = self.on_trigger
+    # def topic_callbacks(self, result: dict[str, TopicCallback]) -> None:
+    #     """Return a dictionary of topic callbacks."""
+    #     super().topic_callbacks(result)
+    #     if self.topic and self.on_trigger:
+    #         result[self.topic] = self.on_trigger
 
 
 @attrs.define()
@@ -98,15 +119,15 @@ class MQTTRWEntity(MQTTEntity):
     command_topic: str = attrs.field(
         default="", validator=(validators.instance_of(str), validators.min_len(2))
     )
-    on_change: Callable | None = None
+    on_command: Callable | None = None
 
     _path = "text"
 
     def topic_callbacks(self, result: dict[str, TopicCallback]) -> None:
         """Return a dictionary of topic callbacks."""
         super().topic_callbacks(result)
-        if self.command_topic and self.on_change:
-            result[self.command_topic] = self.on_change
+        if self.command_topic and self.on_command:
+            result[self.command_topic] = self.on_command
 
 
 @attrs.define()
@@ -173,6 +194,36 @@ class MQTTLightEntity(MQTTRWEntity):
     on_hs_change: TopicCallback | None = None
 
     _path = "light"
+
+    async def send_brightness(
+        self, client: MQTTClient, brightness: int, *, retain: bool = False
+    ) -> None:
+        """Publish the brightness to the MQTT brightness command topic."""
+        await client.publish(
+            self.brightness_state_topic,
+            str(brightness),
+            retain=retain,
+        )
+
+    async def send_effect(
+        self, client: MQTTClient, effect: str, *, retain: bool = False
+    ) -> None:
+        """Publish the effect to the MQTT effect command topic."""
+        await client.publish(
+            self.effect_state_topic,
+            effect,
+            retain=retain,
+        )
+
+    async def send_hs(
+        self, client: MQTTClient, hs: tuple[float, float], *, retain: bool = False
+    ) -> None:
+        """Publish the hue and saturation to the MQTT hs command topic."""
+        await client.publish(
+            self.hs_state_topic,
+            f"{hs[0]},{hs[1]}",
+            retain=retain,
+        )
 
     def topic_callbacks(self, result: dict[str, TopicCallback]) -> None:
         """Return a dictionary of topic callbacks."""

@@ -1,14 +1,5 @@
 """Helpers."""
 
-from __future__ import annotations
-
-import typing
-from json import dumps
-
-if typing.TYPE_CHECKING:
-    from mqtt_entity.client import MQTTClient
-    from mqtt_entity.entities import MQTTEntity
-
 
 def hass_default_rw_icon(*, unit: str) -> str:
     """Get the HASS default icon from the unit."""
@@ -34,20 +25,3 @@ def hass_device_class(*, unit: str) -> str:
         "°C": "temperature",
         "%": "battery",
     }.get(unit, "")
-
-
-async def set_attributes(
-    attributes: dict[str, typing.Any],
-    *,
-    entity: MQTTEntity,
-    client: MQTTClient,
-    retain: bool = False,
-) -> None:
-    """Set attributes helper."""
-    if not entity.json_attributes_topic:
-        raise ValueError(f"Entity '{entity.name}' needs an json_attributes_topic.")
-    await client.publish(
-        topic=entity.json_attributes_topic,
-        payload=dumps(attributes),
-        retain=retain,
-    )

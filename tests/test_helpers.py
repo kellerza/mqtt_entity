@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from mqtt_entity import MQTTSensorEntity
-from mqtt_entity.helpers import hass_default_rw_icon, hass_device_class, set_attributes
+from mqtt_entity.helpers import hass_default_rw_icon, hass_device_class
 
 
 def test_helpers() -> None:
@@ -25,6 +25,6 @@ async def test_set_attributes() -> None:
     )
     mc = AsyncMock()
     thea = {"the": "attr"}
-    await set_attributes(thea, entity=e, client=mc)
+    await e.send_json_attributes(mc, thea)
     assert mc.publish.call_count == 1
     assert mc.publish.call_args[1]["topic"] == "blah"

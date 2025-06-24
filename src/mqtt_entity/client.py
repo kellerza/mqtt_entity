@@ -15,7 +15,6 @@ from paho.mqtt.enums import CallbackAPIVersion
 from paho.mqtt.reasoncodes import ReasonCode
 
 from .device import MQTTDevice, MQTTOrigin, TopicCallback
-from .entities import MQTTDeviceTrigger, MQTTEntity
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -102,18 +101,14 @@ class MQTTClient:
 
     async def publish(
         self,
-        topic: str | MQTTEntity | MQTTDeviceTrigger,
+        topic: str,
         payload: str | None = None,
         qos: int = 0,
         retain: bool = False,
     ) -> None:
         """Publish a MQTT message."""
-        # async with self._paho_lock:
-        if isinstance(topic, MQTTEntity):
-            topic = topic.state_topic
-        if isinstance(topic, MQTTDeviceTrigger):
-            payload = topic.payload
-            topic = topic.topic
+        if not topic:
+            raise ValueError(f"MQTT: Cannot publish to empty topic (payload={payload})")
         if not isinstance(qos, int):
             qos = 0
         if retain:
