@@ -7,8 +7,6 @@ from typing import Any, Callable, Coroutine
 import attrs
 from attrs import validators
 
-from .utils import qsslug
-
 _LOGGER = logging.getLogger(__name__)
 
 
@@ -69,7 +67,7 @@ class MQTTDevice:
     ) -> tuple[str, dict[str, Any]]:
         """Return the discovery dictionary for the MQTT device."""
         return (
-            f"homeassistant/device/{qsslug(self.id)}/config",
+            f"homeassistant/device/{self.id}/config",
             {
                 "dev": discovery_dict(self, exclude=["components"]),
                 "o": discovery_dict(origin),

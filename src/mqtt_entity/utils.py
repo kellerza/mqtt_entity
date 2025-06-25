@@ -27,8 +27,3 @@ def tostr(val: Any) -> str:
     if modf(val)[0] == 0:
         return str(int(val))
     return f"{val:.3f}".rstrip("0")
-
-
-def qsslug(value: str) -> str:
-    """Convert a string to a slug suitable for MQTT topics and ids."""
-    return value.lower().replace("@", "QS_").replace(" ", "_")
