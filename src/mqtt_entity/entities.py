@@ -9,7 +9,7 @@ import attrs
 from attrs import validators
 
 from .device import MQTTBaseEntity, TopicCallback
-from .utils import BOOL_OFF, BOOL_ON, required
+from .utils import BOOL_OFF, BOOL_ON, required, tostr
 
 if TYPE_CHECKING:
     from .client import MQTTClient
@@ -46,10 +46,10 @@ class MQTTEntity(MQTTBaseEntity):
     _path = ""
 
     async def send_state(
-        self, client: MQTTClient, payload: str, *, retain: bool = False
+        self, client: MQTTClient, payload: Any, *, retain: bool = False
     ) -> None:
         """Publish the state to the MQTT state topic."""
-        await client.publish(self.state_topic, payload, retain=retain)
+        await client.publish(self.state_topic, tostr(payload), retain=retain)
 
     async def send_json_attributes(
         self, client: MQTTClient, attributes: dict[str, Any], *, retain: bool = True

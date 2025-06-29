@@ -122,7 +122,7 @@ wheels = [
 
 [[package]]
 name = "mqtt-entity"
-version = "1.0.3"
+version = "1.0.4"
 source = { editable = "." }
 dependencies = [
     { name = "attrs" },
@@ -149,10 +149,10 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "attrs", specifier = ">=25.3.0" },
-    { name = "cattrs", marker = "extra == 'options'", specifier = ">=25.1.1" },
+    { name = "attrs", specifier = ">=25,<26" },
+    { name = "cattrs", marker = "extra == 'options'", specifier = ">=25,<26" },
     { name = "paho-mqtt", specifier = ">=2.1.0,<3" },
-    { name = "pyyaml", marker = "extra == 'options'", specifier = ">=6.0.2" },
+    { name = "pyyaml", marker = "extra == 'options'", specifier = ">=6,<7" },
 ]
 provides-extras = ["options"]
 

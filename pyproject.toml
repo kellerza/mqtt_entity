@@ -14,14 +14,14 @@ keywords = [
     "asyncio"
 ]
 dependencies = [
-    "attrs>=25.3.0",
+    "attrs>=25,<26",
     "paho-mqtt>=2.1.0,<3"
 ]
 
 [project.optional-dependencies]
 options = [
-  "cattrs>=25.1.1",
-  "pyyaml>=6.0.2",
+  "cattrs>=25,<26",
+  "pyyaml>=6,<7",
 ]
 
 [dependency-groups]
@@ -83,7 +83,7 @@ max-returns = 8
 
 [tool.pytest.ini_options]
 pythonpath = [".", "src"]
-testpaths = "tests"
+testpaths = "src/tests"
 filterwarnings = "ignore:.+@coroutine.+deprecated.+"
 norecursedirs = [".git", "modules"]
 log_cli = true

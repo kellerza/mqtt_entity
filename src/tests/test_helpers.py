@@ -4,8 +4,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from mqtt_entity import MQTTSensorEntity
-from mqtt_entity.helpers import hass_default_rw_icon, hass_device_class
+from mqtt_entity import MQTTSensorEntity, hass_default_rw_icon, hass_device_class
 
 
 def test_helpers() -> None:

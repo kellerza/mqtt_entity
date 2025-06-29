@@ -33,8 +33,8 @@ class MQTTClient:
     client: Client = attrs.field(init=False, repr=False)
     topics_subscribed: set[str] = attrs.field(init=False, repr=False)
     """All topic we subscribed to."""
-    migrate_entities: bool = attrs.field(default=True)
-    """Migrate entities on discovery info publish. Else remove them."""
+    clean_entities: int = attrs.field(default=1)
+    """Clean entities on discovery: 1=migrate, 2=remove, 0=none."""
 
     def __attrs_post_init__(self) -> None:
         """Init MQTT Client."""
@@ -144,26 +144,18 @@ class MQTTClient:
             timeout.cancel()
             timeout.cancel()
             _LOGGER.info("MQTT: Home Assistant online. Publish discovery info.")
-            await self._publish_discovery_info()
+            await self.publish_discovery_info_force()
 
         if not self.client.is_connected():
             raise ConnectionError()
 
         self.topic_subscribe("homeassistant/status", _online_cb)
 
-    async def _publish_discovery_info(self) -> None:
-        """Home Assistant MQTT discovery helper.
-
-        https://www.home-assistant.io/docs/mqtt/discovery/
-        Publish discovery topics on "homeassistant/device/{device_id}/{sensor_id}/config"
-        Publish discovery topics on "homeassistant/(sensor|switch)/{device_id}/{sensor_id}/config"
-        """
-        if self.migrate_entities:
-            _LOGGER.debug("MQTT: Migrate entities")
-            await self.clean_entity_based_cb(migrate=True)
-        else:
-            await self.clean_entity_based_cb(remove=True)
-        await asyncio.sleep(1)
+    async def publish_discovery_info_force(self) -> None:
+        """Publish discovery info immediately."""
+        if self.clean_entities:
+            self.clean_entity_based_discovery()
+            await asyncio.sleep(1)
 
         for ddev in self.devs:
             disco_topic, dico_dict = ddev.discovery_info(
@@ -178,10 +170,13 @@ class MQTTClient:
             for topic, cbk in tcb.items():
                 self.topic_subscribe(topic, cbk)
 
-    async def clean_entity_based_cb(
-        self, *, migrate: bool = False, remove: bool = False
-    ) -> None:
-        """Remove previously discovered entities."""
+    def clean_entity_based_discovery(self) -> None:
+        """Remove entity based discovery.
+
+        https://www.home-assistant.io/docs/mqtt/discovery/
+        Publish discovery topics on "homeassistant/device/{device_id}/{sensor_id}/config"
+        Publish discovery topics on "homeassistant/(sensor|switch)/{device_id}/{sensor_id}/config"
+        """
 
         async def cb_migrate(payload_s: str, topic: str) -> None:
             """Callback to remove the device."""
@@ -215,6 +210,10 @@ class MQTTClient:
 
             return _cb_remove
 
+        if self.clean_entities == 0:
+            return
+        migrate = self.clean_entities == 1
+        self.clean_entities = 0
         for dev in self.devs:
             topic = f"homeassistant/+/{dev.id}/+/config"
             self.topic_subscribe(topic, cb_migrate if migrate else cb_remove(dev))

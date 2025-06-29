@@ -18,6 +18,8 @@ BOOL_OFF = "OFF"
 
 def tostr(val: Any) -> str:
     """Convert a value to a string with maximum 3 decimal places."""
+    if isinstance(val, str):
+        return val
     if val is None:
         return ""
     if isinstance(val, bool):

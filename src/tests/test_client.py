@@ -47,7 +47,7 @@ async def test_mqtt_server() -> None:
                     unique_id=select_id,
                     command_topic=f"test/{select_id}_set",
                     options=["opt 1", "opt 2"],
-                    on_change=select_select,
+                    on_command=select_select,
                     state_topic=f"test/{select_id}",
                 ),
                 mqtt_entity.MQTTSelectEntity(
@@ -55,7 +55,7 @@ async def test_mqtt_server() -> None:
                     unique_id=select_id2,
                     command_topic=f"test/{select_id2}_set",
                     options=["opt 3", "opt 4"],
-                    on_change=select_select2,
+                    on_command=select_select2,
                     state_topic=f"test/{select_id2}",
                 ),
                 mqtt_entity.MQTTSensorEntity(
