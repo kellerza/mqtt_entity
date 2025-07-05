@@ -1,7 +1,7 @@
 [project]
 name = "mqtt-entity"
-version = "1.0.6"
-description = "MQTT client to manage Home Assistant entities via MQTT"
+version = "1.0.5"
+description = "MQTT client supporting Home Assistant MQTT entity auto-discovery"
 authors = [{ name = "Johann Kellerman", email = "johann.kellerman@nokia.com" }]
 license = { file = "LICENSE" }
 readme = "README.md"
@@ -26,13 +26,13 @@ options = [
 
 [dependency-groups]
 dev = [
-  "mypy",
+  "mypy>=1,<2",
   "pylint>=3,<4",
   "pytest-asyncio",
-  "pytest-cov>=6",
-  "pytest-env>=1",
+  "pytest-cov",
+  "pytest-env",
   "pytest-github-actions-annotate-failures",
-  "pytest>=8",
+  "pytest>=8,<9",
   "types-PyYAML",
 ]
 
@@ -42,12 +42,12 @@ requires = ["uv_build>=0.7.13,<0.8.0"]
 build-backend = "uv_build"
 
 [tool.uv.build-backend]
-source-exclude = [".mypy_cache", "tests"]
+source-exclude = [".mypy_cache", "src/tests"]
 
 [tool.ruff]
 # Assume Python 3.12
 target-version = "py312"
-src = ["src", "test"]
+src = ["src"]
 
 [tool.ruff.format]
 quote-style = "double"

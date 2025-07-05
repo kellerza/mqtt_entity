@@ -5,8 +5,7 @@ import importlib.metadata
 import inspect
 import logging
 import sys
-from json import dumps, loads
-from json.decoder import JSONDecodeError
+from json import dumps
 from typing import Any
 
 import attrs
@@ -15,6 +14,7 @@ from paho.mqtt.enums import CallbackAPIVersion
 from paho.mqtt.reasoncodes import ReasonCode
 
 from .device import MQTTDevice, MQTTOrigin, TopicCallback
+from .utils import load_json
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -144,14 +144,14 @@ class MQTTClient:
             timeout.cancel()
             timeout.cancel()
             _LOGGER.info("MQTT: Home Assistant online. Publish discovery info.")
-            await self.publish_discovery_info_force()
+            await self.publish_discovery_info_now()
 
         if not self.client.is_connected():
             raise ConnectionError()
 
         self.topic_subscribe("homeassistant/status", _online_cb)
 
-    async def publish_discovery_info_force(self) -> None:
+    async def publish_discovery_info_now(self) -> None:
         """Publish discovery info immediately."""
         if self.clean_entities:
             self.clean_entity_based_discovery()
@@ -182,7 +182,7 @@ class MQTTClient:
             """Callback to remove the device."""
             if not payload_s:
                 return
-            payload = mqtt_loads(payload_s)
+            payload = load_json(payload_s)
             _LOGGER.info("MQTT MIGRATE topic %s with payload %s", topic, payload)
             migrate_ok = payload == {"migrate_discovery": True}
             _pl = None if migrate_ok else dumps({"migrate_discovery": True})
@@ -196,7 +196,7 @@ class MQTTClient:
             async def _cb_remove(payload_s: str, topic: str) -> None:
                 if not payload_s:
                     return
-                payload = mqtt_loads(payload_s)
+                payload = load_json(payload_s)
                 # if not part of this device, remove the topic
                 if not isinstance(payload, dict) or "unique_id" not in payload:
                     _LOGGER.warning(
@@ -252,19 +252,6 @@ class MQTTClient:
         self.topics_subscribed.add(topic)
 
 
-def mqtt_loads(msg: str) -> dict[str, Any] | str:
-    """Load a JSON string into a dictionary."""
-    if msg is None:
-        return {}
-    try:
-        res = loads(msg)
-        if isinstance(res, dict):
-            return res
-    except JSONDecodeError:
-        pass
-    return str(msg)
-
-
 def _mqtt_on_connect(
     _client: Client,
     _userdata: Any,
@@ -277,16 +264,6 @@ def _mqtt_on_connect(
         _LOGGER.info("MQTT: Connection successful")
         return
     _LOGGER.error("MQTT: Connection failed with reason code %s", _rc)
-
-    # msg = {
-    #     mqttc.CONNACK_ACCEPTED: "successful",
-    #     mqttc.CONNACK_REFUSED_PROTOCOL_VERSION: "refused - incorrect protocol version",
-    #     mqttc.CONNACK_REFUSED_IDENTIFIER_REJECTED: "refused - invalid client identifier",
-    #     mqttc.CONNACK_REFUSED_SERVER_UNAVAILABLE: "refused - server unavailable",
-    #     mqttc.CONNACK_REFUSED_BAD_USERNAME_PASSWORD: "refused - bad username or password",
-    #     mqttc.CONNACK_REFUSED_NOT_AUTHORIZED: "refused - not authorised",
-    # }.get(_rc, f"refused - {_rc}")
-    # _LOGGER.info("MQTT: Connection %s", msg)
 
 
 def _mqtt_on_message(

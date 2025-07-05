@@ -21,24 +21,32 @@ if TYPE_CHECKING:
 class MQTTEntity(MQTTBaseEntity):
     """A generic Home Assistant entity used as the base class for other entities."""
 
-    unique_id: str
-    # device: MQTTDevice
-    state_topic: str
     name: str
+    unique_id: str
+    """An ID that uniquely identifies this sensor. If two sensors have the same unique ID,
+      Home Assistant will raise an exception. Required when used with device-based discovery."""
+    state_topic: str
     object_id: str = ""
-    # availability: list[MQTTAvailability] = attrs.field(factory=list)
-    # availability_mode: str = ""
+    """Used instead of name for automatic generation of entity_id."""
+
     device_class: str = ""
-    unit_of_measurement: str = ""
-    state_class: str = ""
-    expire_after: int = 0
-    """Unavailable if not updated."""
+    """The type/class of the sensor to set the icon in the frontend. The device_class can be null."""
     enabled_by_default: bool = True
+    """Flag which defines if the entity should be enabled when first added."""
     entity_category: str = ""
+    """The category of the entity. When set, the entity category must be diagnostic for sensors."""
     entity_picture: str = ""
+    """Picture URL for the entity."""
+    expire_after: int = 0
+    """If set, it defines the number of seconds after the sensor's state expires,
+    if it's not updated. After expiry, the sensor's state becomes unavailable.
+    Default the sensors state never expires."""
     icon: str = ""
     json_attributes_topic: str = ""
-    """Used by the set_attributes helper."""
+    state_class: str = ""
+    """https://developers.home-assistant.io/docs/core/entity/sensor/#available-state-classes"""
+    unit_of_measurement: str = ""
+    """Defines the units of measurement of the sensor, if any. The unit_of_measurement can be null."""
 
     discovery_extra: dict[str, Any] = attrs.field(factory=dict)
     """Additional MQTT Discovery attributes."""
@@ -54,7 +62,7 @@ class MQTTEntity(MQTTBaseEntity):
     async def send_json_attributes(
         self, client: MQTTClient, attributes: dict[str, Any], *, retain: bool = True
     ) -> None:
-        """Publish the attributes to the MQTT attributes topic."""
+        """Publish the attributes to the MQTT JSON attributes topic."""
         await client.publish(
             topic=self.json_attributes_topic, payload=dumps(attributes), retain=retain
         )
@@ -134,6 +142,12 @@ class MQTTRWEntity(MQTTEntity):
 class MQTTSensorEntity(MQTTEntity):
     """A Home Assistant Sensor entity."""
 
+    force_update: bool = False
+    """Sends update events even if the value hasn’t changed. Useful if you want to have
+    meaningful value graphs in history."""
+    suggested_display_precision: int = 0
+    """The number of decimals which should be used in the sensor’s state after rounding."""
+
     _path = "sensor"
 
 
@@ -167,7 +181,7 @@ class MQTTSwitchEntity(MQTTRWEntity):
 
 
 @attrs.define()
-class MQTTText(MQTTRWEntity):
+class MQTTTextEntity(MQTTRWEntity):
     """A Home Assistant Switch entity."""
 
     _path = "text"

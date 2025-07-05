@@ -3,8 +3,8 @@ name: CI
 on: [push, pull_request]
 
 env:
-  RUFF_VERSION: 0.12.0
-  UV_VERSION: 0.7.13
+  RUFF_VERSION: 0.12.1
+  UV_VERSION: 0.7.17
   TEST_TARGET: "src"
 
 jobs:

@@ -1,5 +1,7 @@
 """Test entities."""
 
+from unittest.mock import AsyncMock
+
 import pytest
 
 from mqtt_entity import (
@@ -146,3 +148,19 @@ def test_device_trigger() -> None:
             }
         },
     }
+
+
+@pytest.mark.asyncio
+async def test_set_attributes() -> None:
+    """Test set_attributes."""
+    e = MQTTSensorEntity(
+        json_attributes_topic="blah",
+        unique_id="a1",
+        state_topic="/st",
+        name="test1",
+    )
+    mc = AsyncMock()
+    thea = {"the": "attr"}
+    await e.send_json_attributes(mc, thea)
+    assert mc.publish.call_count == 1
+    assert mc.publish.call_args[1]["topic"] == "blah"
