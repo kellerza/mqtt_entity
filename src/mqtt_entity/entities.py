@@ -259,4 +259,7 @@ class MQTTNumberEntity(MQTTRWEntity):
     mode: str = "auto"
     step: float = 1.0
 
+    suggested_display_precision: int = 0
+    """The number of decimals which should be used in the sensor’s state after rounding."""
+
     _path = "number"

@@ -117,7 +117,7 @@ class MQTTClient:
             "MQTT: Publish %s%s %s, %s", qos, "R" if retain else "", topic, payload
         )
         if payload and len(payload) > 20000:
-            _LOGGER.warning("Payload >20kb: %s", len(payload))
+            _LOGGER.warning("Payload >20000: %s", len(payload))
         await asyncio.get_running_loop().run_in_executor(
             None, self.client.publish, topic, payload, qos, bool(retain)
         )
@@ -160,10 +160,13 @@ class MQTTClient:
             await asyncio.sleep(1)
 
         for ddev in self.devs:
-            disco_topic, dico_dict = ddev.discovery_info(
+            disco_topic, disco_dict = ddev.discovery_info(
                 self.availability_topic, origin=self.origin
             )
-            await self.publish(disco_topic, payload=dumps(dico_dict))
+            disco_payload = dumps(disco_dict)
+            if len(disco_payload) > 20000:  # 20000 is the MQTT Explorer limit
+                disco_payload = dumps(disco_dict, indent=None, separators=(",", ":"))
+            await self.publish(disco_topic, disco_payload)
 
             # add topic callbacks
             tcb: dict[str, TopicCallback] = {}
