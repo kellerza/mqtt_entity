@@ -1,14 +1,11 @@
 """HASS MQTT Device, used for device based discovery."""
 
-import inspect
-import logging
 from typing import Any, Callable, Coroutine
 
 import attrs
 from attrs import validators
 
-_LOGGER = logging.getLogger(__name__)
-
+from .helpers import discovery_dict
 
 type TopicCallback = (
     Callable[[str], None]
@@ -34,8 +31,10 @@ class MQTTOrigin:
     """Represent the origin of an MQTT message."""
 
     name: str
-    sw_version: str = ""
-    support_url: str = ""
+    sw: str = ""
+    """ws_version"""
+    url: str = ""
+    """support_url"""
 
 
 @attrs.define()
@@ -77,33 +76,3 @@ class MQTTDevice:
                 "cmps": {k: discovery_dict(v) for k, v in self.components.items()},
             },
         )
-
-
-def discovery_dict(
-    obj: attrs.AttrsInstance, exclude: list[str] | None = None
-) -> dict[str, Any]:
-    """Represent the entity as a dictionary, without empty values and defaults."""
-
-    def _filter(atrb: attrs.Attribute, value: Any) -> bool:
-        if exclude and atrb.name in exclude:
-            return False
-        if atrb.name in ("discovery_extra", "_path"):
-            return False
-        return bool(value) and atrb.default != value and not inspect.isfunction(value)
-
-    res = attrs.asdict(obj, filter=_filter)
-
-    extra = getattr(obj, "discovery_extra", None)
-    if extra:
-        keys = {
-            key: extra[key] for key in extra if key in res and res[key] != extra[key]
-        }
-        _LOGGER.debug("Overwriting %s", keys)
-        res.update(extra)
-
-    if isinstance(obj, MQTTBaseEntity):
-        obj.discovery_dict(res)
-        if not res.get("platform"):  # Required for device based discovery
-            res["platform"] = getattr(obj, "_path", "")
-
-    return res

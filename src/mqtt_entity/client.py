@@ -27,7 +27,7 @@ class MQTTClient:
     availability_topic: str = ""
     origin: MQTTOrigin = attrs.field(
         factory=lambda: MQTTOrigin(
-            name="mqtt-entity", sw_version=importlib.metadata.version("mqtt-entity")
+            name="mqtt-entity", sw=importlib.metadata.version("mqtt-entity")
         )
     )
     client: Client = attrs.field(init=False, repr=False)
@@ -116,6 +116,8 @@ class MQTTClient:
         _LOGGER.debug(
             "MQTT: Publish %s%s %s, %s", qos, "R" if retain else "", topic, payload
         )
+        if payload and len(payload) > 20000:
+            _LOGGER.warning("Payload >20kb: %s", len(payload))
         await asyncio.get_running_loop().run_in_executor(
             None, self.client.publish, topic, payload, qos, bool(retain)
         )

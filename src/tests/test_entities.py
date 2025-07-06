@@ -67,9 +67,9 @@ def test_mqtt_entity() -> None:
         "cmps": {
             "789": {
                 "name": "test1",
-                "platform": "sensor",
-                "unique_id": "789",
-                "state_topic": "/test/a",
+                "p": "sensor",
+                "uniq_id": "789",
+                "stat_t": "/test/a",
             }
         },
     }
@@ -97,11 +97,11 @@ def test_discovery_extra() -> None:
         "cmps": {
             "789": {
                 "name": "test1",
-                "unique_id": "789",
-                "json_attributes_topic": "/test/f",
-                "state_topic": "c",
+                "uniq_id": "789",
+                "json_attr_t": "/test/f",
+                "stat_t": "c",
                 "a": "b",
-                "platform": "sensor",
+                "p": "sensor",
             }
         },
     }
@@ -139,12 +139,12 @@ def test_device_trigger() -> None:
         },
         "cmps": {
             "trigger1": {
-                "automation_type": "trigger",
-                "topic": "zigbee2mqtt/0x90fd9ffffedf1266/action",
+                "atype": "trigger",
+                "t": "zigbee2mqtt/0x90fd9ffffedf1266/action",
                 "type": "action",
-                "subtype": "arrow_left_click",
-                "payload": "arrow_left_click",
-                "platform": "device_automation",
+                "stype": "arrow_left_click",
+                "pl": "arrow_left_click",
+                "p": "device_automation",
             }
         },
     }
