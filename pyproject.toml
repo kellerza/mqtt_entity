@@ -1,6 +1,6 @@
 [project]
 name = "mqtt-entity"
-version = "1.0.7"
+version = "1.0.8"
 description = "MQTT client supporting Home Assistant MQTT entity auto-discovery"
 authors = [{ name = "Johann Kellerman", email = "johann.kellerman@nokia.com" }]
 license = { file = "LICENSE" }
