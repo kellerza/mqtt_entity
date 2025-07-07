@@ -93,7 +93,7 @@ class AddonOptions:
 class MQTTOptions(AddonOptions):
     """MQTT Options for HASS Addon."""
 
-    mqtt_host: str = "homeassistant.local"
+    mqtt_host: str = "core-mosquitto"
     mqtt_port: int = 1883
     mqtt_username: str = ""
     mqtt_password: str = ""

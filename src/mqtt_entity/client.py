@@ -52,7 +52,7 @@ class MQTTClient:
         *,
         username: str | None = None,
         password: str | None = None,
-        host: str = "homeassistant.local",
+        host: str = "core-mosquitto",
         port: int = 1883,
     ) -> None:
         """Connect to MQTT server specified as attributes of the options."""
@@ -125,7 +125,7 @@ class MQTTClient:
     def publish_discovery_info(self) -> None:
         """Publish discovery info if HA is online."""
 
-        async def _timeout() -> None:
+        def _timeout() -> None:
             """Timeout for Home Assistant online check."""
             _LOGGER.error(
                 "MQTT: Home Assistant not online. Topic homeassistant/status is empty"
@@ -144,8 +144,10 @@ class MQTTClient:
                 return
 
             timeout.cancel()
-            timeout.cancel()
-            _LOGGER.info("MQTT: Home Assistant online. Publish discovery info.")
+            _LOGGER.info(
+                "MQTT: Home Assistant online. Publish discovery info for %s",
+                [d.name for d in self.devs],
+            )
             await self.publish_discovery_info_now()
 
         if not self.client.is_connected():
