@@ -9,9 +9,9 @@ from mqtt_entity import (
     MQTTDeviceTrigger,
     MQTTEntity,
     MQTTNumberEntity,
-    MQTTOrigin,
     MQTTSensorEntity,
 )
+from mqtt_entity.device import MQTTOrigin
 
 
 def test_ent() -> None:
