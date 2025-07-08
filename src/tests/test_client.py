@@ -74,9 +74,7 @@ async def test_mqtt_server() -> None:
     mqc = mqtt_entity.MQTTClient(
         devs=[dev1, dev2],
         availability_topic="test/available",
-        origin=mqtt_entity.MQTTOrigin(
-            name="Test Origin",
-        ),
+        origin_name="Test Origin",
     )
 
     await mqc.connect(
@@ -93,7 +91,7 @@ async def test_mqtt_server() -> None:
     )
 
     _LOGGER.info("Start & Publishing discovery info")
-    mqc.publish_discovery_info()
+    mqc.publish_discovery_info_when_online()
     # mqc.migrate_entities = False
     # await mqc._publish_discovery_info()
     await asyncio.sleep(0.1)

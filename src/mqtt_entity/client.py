@@ -25,11 +25,11 @@ class MQTTClient:
 
     devs: list[MQTTDevice]
     availability_topic: str = ""
-    origin: MQTTOrigin = attrs.field(
-        factory=lambda: MQTTOrigin(
-            name="mqtt-entity", sw=importlib.metadata.version("mqtt-entity")
-        )
+    origin_name: str = "mqtt-entity"
+    origin_version: str = attrs.field(
+        factory=lambda: importlib.metadata.version("mqtt-entity")
     )
+    origin_url: str = ""
     client: Client = attrs.field(init=False, repr=False)
     topics_subscribed: set[str] = attrs.field(init=False, repr=False)
     """All topic we subscribed to."""
@@ -39,10 +39,7 @@ class MQTTClient:
     def __attrs_post_init__(self) -> None:
         """Init MQTT Client."""
         self.topics_subscribed = set()
-        self.client = Client(
-            callback_api_version=CallbackAPIVersion.VERSION2,
-            client_id=self.origin.name,
-        )
+        self.client = Client(callback_api_version=CallbackAPIVersion.VERSION2)
         self.client.on_connect = _mqtt_on_connect
         self.client.on_message = _mqtt_on_message
 
@@ -122,8 +119,10 @@ class MQTTClient:
             None, self.client.publish, topic, payload, qos, bool(retain)
         )
 
-    def publish_discovery_info(self) -> None:
+    def publish_discovery_info_when_online(self) -> None:
         """Publish discovery info if HA is online."""
+        if "homeassistant/status" in self.topics_subscribed:
+            return
 
         def _timeout() -> None:
             """Timeout for Home Assistant online check."""
@@ -163,7 +162,12 @@ class MQTTClient:
 
         for ddev in self.devs:
             disco_topic, disco_dict = ddev.discovery_info(
-                self.availability_topic, origin=self.origin
+                self.availability_topic,
+                origin=MQTTOrigin(
+                    name=self.origin_name,
+                    sw=self.origin_version,
+                    url=self.origin_url,
+                ),
             )
             disco_payload = dumps(disco_dict)
             if len(disco_payload) > 20000:  # 20000 is the MQTT Explorer limit
@@ -234,6 +238,10 @@ class MQTTClient:
 
     def topic_subscribe(self, topic: str, callback: TopicCallback) -> None:
         """Add a topic to the topic callbacks."""
+
+        if topic in self.topics_subscribed:
+            _LOGGER.warning("MQTT: Topic %s already subscribed", topic)
+            return
 
         paramc = len(inspect.signature(callback).parameters)
         loop = asyncio.get_running_loop()
