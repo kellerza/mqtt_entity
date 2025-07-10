@@ -1,5 +1,6 @@
 # MQTT Entity helper library for Home Assistant
 
+[![Workflow Status](https://github.com/kellerza/mqtt_entity/actions/workflows/main.yml/badge.svg?branch=master)](https://github.com/kellerza/mqtt_entity/actions)
 [![codecov](https://codecov.io/gh/kellerza/mqtt_entity/branch/main/graph/badge.svg?token=PG4N1YBUGW)](https://codecov.io/gh/kellerza/mqtt_entity)
 
 A Python helper library to manage Home Assistant entities over MQTT.
@@ -13,12 +14,16 @@ Features:
 - MQTTDevice class to manage devices
   - Availability management
   - Manage entities per device
-- Entities modelled as classes:
+- Home Assistant Entities modelled as attrs classes:
   - Read-only: Sensor, BinarySensor
-  - Read & write: Select, Switch, Number
-  - MQTT device event
+  - Read & write: Select, Switch, Number, Text, Light
+  - MQTT device events
 - Asyncio based
-- Helper for Home Assistant addon configuration (optional)
+- Helper for Home Assistant add-ons (optional)
+  - Configuration modeled as attrs classes
+    - Load from environment variables, HA's options.yaml or options.json
+    - MQTT connection settings
+  - Enable add-on logging (& debug by config)
 
 ## Why?
 
