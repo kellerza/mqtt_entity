@@ -2,20 +2,17 @@
 
 import inspect
 import logging
-from typing import Any, NotRequired, TypedDict
+from typing import Any, Iterable, NotRequired, TypedDict
 
 import attrs
 
 _LOGGER = logging.getLogger(__name__)
 
 
-def discovery_dict(
-    obj: attrs.AttrsInstance, exclude: list[str] | None = None, abbreviate: bool = True
+def as_dict(
+    obj: attrs.AttrsInstance, exclude: Iterable[str] | None = None
 ) -> dict[str, Any]:
-    """Represent the entity as a dictionary, without empty values and defaults.
-
-    https://www.home-assistant.io/integrations/mqtt/#supported-abbreviations-in-mqtt-discovery-messages
-    """
+    """Represent the object as a dictionary, without empty values and defaults."""
 
     def _filter(atrb: attrs.Attribute, value: Any) -> bool:
         if exclude and atrb.name in exclude:
@@ -34,17 +31,19 @@ def discovery_dict(
         _LOGGER.debug("Overwriting %s", keys)
         res.update(extra)
 
-    if hasattr(obj, "discovery_dict"):
-        getattr(obj, "discovery_dict", lambda x: None)(res)
-    if not res.get("platform") and hasattr(
-        obj, "_path"
-    ):  # Required for device based discovery
-        res["platform"] = getattr(obj, "_path", "")
-
-    if abbreviate:
-        return {abbreviations.get(k, k): v for k, v in res.items()}
-
     return res
+
+
+def hass_abbreviate(
+    result: dict[str, Any], *, abbreviations: dict[str, str] | None = None
+) -> dict[str, Any]:
+    """Abbreviate dictionary keys for entities.
+
+    https://www.home-assistant.io/integrations/mqtt/#supported-abbreviations-in-mqtt-discovery-messages
+    """
+    if not abbreviations:
+        abbreviations = ABBREVIATIONS
+    return {abbreviations.get(k, k): v for k, v in result.items()}
 
 
 def hass_default_rw_icon(*, unit: str) -> str:
@@ -94,7 +93,7 @@ class MQTTEntityOptions(TypedDict):
     discovery_extra: NotRequired[dict[str, Any]]
 
 
-abbreviations = {
+ABBREVIATIONS = {
     v: k
     for k, v in {
         "act_t": "action_topic",

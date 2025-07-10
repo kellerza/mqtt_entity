@@ -1,29 +1,12 @@
 """HASS MQTT Device, used for device based discovery."""
 
-from typing import Any, Callable, Coroutine
+from typing import Any
 
 import attrs
 from attrs import validators
 
-from .helpers import discovery_dict
-
-type TopicCallback = (
-    Callable[[str], None]
-    | Callable[[str, str], None]
-    | Callable[[str], Coroutine[Any, Any, None]]
-    | Callable[[str, str], Coroutine[Any, Any, None]]
-)
-
-
-@attrs.define()
-class MQTTBaseEntity:
-    """Base class for entities that support MQTT Discovery."""
-
-    def discovery_dict(self, result: dict[str, Any]) -> None:
-        """Post-process the discovery dictionary."""
-
-    def topic_callbacks(self, result: dict[str, TopicCallback]) -> None:
-        """Append topics and callbacks."""
+from .entities import MQTTBaseEntity
+from .helpers import as_dict, hass_abbreviate
 
 
 @attrs.define()
@@ -41,12 +24,15 @@ class MQTTOrigin:
 class MQTTDevice:
     """Base class for MQTT Device Discovery. A Home Assistant Device groups entities."""
 
-    components: dict[str, MQTTBaseEntity]
-    """MQTT component entities."""
-
     identifiers: list[str | tuple[str, Any]] = attrs.field(
         validator=[validators.instance_of(list), validators.min_len(1)]
     )
+
+    components: dict[str, MQTTBaseEntity]
+    """MQTT component entities."""
+    remove_components: dict[str, str] = attrs.field(factory=dict)
+    """Components to be removed on discovery. object_id and the platform name."""
+
     connections: list[str] = attrs.field(factory=list)
     configuration_url: str = ""
     manufacturer: str = ""
@@ -65,14 +51,18 @@ class MQTTDevice:
         self, availability_topic: str, *, origin: MQTTOrigin
     ) -> tuple[str, dict[str, Any]]:
         """Return the discovery dictionary for the MQTT device."""
+        cmps = {
+            k: hass_abbreviate(v.as_discovery_dict) for k, v in self.components.items()
+        }
+        for key, platform in self.remove_components.items():
+            cmps[key] = {"p": cmps[key]["p"] if key in cmps else platform}
+
         return (
             f"homeassistant/device/{self.id}/config",
             {
-                "dev": discovery_dict(self, exclude=["components"]),
-                "o": discovery_dict(origin),
-                "avty": {
-                    "topic": availability_topic,
-                },
-                "cmps": {k: discovery_dict(v) for k, v in self.components.items()},
+                "dev": as_dict(self, exclude=["components", "remove_components"]),
+                "o": as_dict(origin),
+                "avty": {"topic": availability_topic},
+                "cmps": cmps,
             },
         )

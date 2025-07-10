@@ -3,18 +3,44 @@
 from __future__ import annotations
 
 from json import dumps
-from typing import TYPE_CHECKING, Any, Callable, Sequence
+from typing import TYPE_CHECKING, Any, Callable, Coroutine, Sequence
 
 import attrs
 from attrs import validators
 
-from .device import MQTTBaseEntity, TopicCallback
+from .helpers import as_dict
 from .utils import BOOL_OFF, BOOL_ON, required, tostr
 
 if TYPE_CHECKING:
     from .client import MQTTClient
 
 # pylint: disable=too-few-public-methods, too-many-instance-attributes
+
+type TopicCallback = (
+    Callable[[str], None]
+    | Callable[[str, str], None]
+    | Callable[[str], Coroutine[Any, Any, None]]
+    | Callable[[str, str], Coroutine[Any, Any, None]]
+)
+
+
+@attrs.define()
+class MQTTBaseEntity:
+    """Base class for entities that support MQTT Discovery."""
+
+    @property
+    def topic_callbacks(self) -> dict[str, TopicCallback]:
+        """Append topics and callbacks."""
+        return {}
+
+    @property
+    def as_discovery_dict(self) -> dict[str, Any]:
+        """Discovery dict."""
+        res = as_dict(self)
+        # platform required for device based discovery
+        if not res.get("platform") and hasattr(self, "_path"):
+            res["platform"] = getattr(self, "_path")
+        return res
 
 
 @attrs.define()
@@ -101,20 +127,13 @@ class MQTTDeviceTrigger(MQTTBaseEntity):
     discovery_extra: dict[str, Any] = attrs.field(factory=dict)
     """Additional MQTT Discovery attributes."""
 
-    def discovery_dict(self, result: dict[str, Any]) -> None:
+    @property
+    def as_discovery_dict(self) -> dict[str, Any]:
         """Return the final discovery dictionary."""
-        super().discovery_dict(result)
+        result = super().as_discovery_dict
         result["automation_type"] = "trigger"
         result["platform"] = "device_automation"
-
-    # on_trigger: Callable | None = None
-    # """Callable to call when triggered."""
-
-    # def topic_callbacks(self, result: dict[str, TopicCallback]) -> None:
-    #     """Return a dictionary of topic callbacks."""
-    #     super().topic_callbacks(result)
-    #     if self.topic and self.on_trigger:
-    #         result[self.topic] = self.on_trigger
+        return result
 
 
 @attrs.define()
@@ -131,11 +150,13 @@ class MQTTRWEntity(MQTTEntity):
 
     _path = "text"
 
-    def topic_callbacks(self, result: dict[str, TopicCallback]) -> None:
+    @property
+    def topic_callbacks(self) -> dict[str, TopicCallback]:
         """Return a dictionary of topic callbacks."""
-        super().topic_callbacks(result)
+        result = super().topic_callbacks
         if self.command_topic and self.on_command:
             result[self.command_topic] = self.on_command
+        return result
 
 
 @attrs.define()
@@ -239,15 +260,17 @@ class MQTTLightEntity(MQTTRWEntity):
             retain=retain,
         )
 
-    def topic_callbacks(self, result: dict[str, TopicCallback]) -> None:
+    @property
+    def topic_callbacks(self) -> dict[str, TopicCallback]:
         """Return a dictionary of topic callbacks."""
-        super().topic_callbacks(result)
+        result = super().topic_callbacks
         if self.brightness_command_topic and self.on_brightness_change:
             result[self.brightness_command_topic] = self.on_brightness_change
         if self.effect_command_topic and self.on_effect_change:
             result[self.effect_command_topic] = self.on_effect_change
         if self.hs_command_topic and self.on_hs_change:
             result[self.hs_command_topic] = self.on_hs_change
+        return result
 
 
 @attrs.define()
