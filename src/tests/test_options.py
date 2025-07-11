@@ -29,17 +29,15 @@ def test_load_env() -> None:
     assert OPT.mqtt_port == 123
     assert res
 
-    opt = LoadEnvClass()
     for environ in (
         {"LST": '["1", "2", "3"]', "num": "5"},
         {"LST": "1,2,3", "NUM": "5"},
     ):
+        opt = LoadEnvClass()
         with mock.patch.dict(os.environ, environ, clear=True):
             opt.load_env()
         assert opt.lst == ["1", "2", "3"]
         assert opt.num == 5
-        opt.lst.clear()
-        opt.num = 0
 
 
 def test_load_env_bad() -> None:
