@@ -43,7 +43,7 @@ class MQTTDevice:
     via_device: str = ""
 
     @property
-    def id(self) -> str:  # pylint: disable=invalid-name
+    def id(self) -> str:
         """The device identifier. Also object_id."""
         return str(self.identifiers[0])
 

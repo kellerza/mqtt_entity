@@ -2,7 +2,8 @@
 
 import inspect
 import logging
-from typing import Any, Iterable, NotRequired, TypedDict
+from collections.abc import Iterable
+from typing import Any, NotRequired, TypedDict
 
 import attrs
 
@@ -17,7 +18,7 @@ def as_dict(
     def _filter(atrb: attrs.Attribute, value: Any) -> bool:
         if exclude and atrb.name in exclude:
             return False
-        if atrb.name in ("discovery_extra", "_path"):
+        if atrb.name in ("discovery_extra",):
             return False
         return bool(value) and atrb.default != value and not inspect.isfunction(value)
 
@@ -25,9 +26,7 @@ def as_dict(
 
     extra = getattr(obj, "discovery_extra", None)
     if extra:
-        keys = {
-            key: extra[key] for key in extra if key in res and res[key] != extra[key]
-        }
+        keys = {k: extra[k] for k in extra if k in res and res[k] != extra[k]}
         _LOGGER.debug("Overwriting %s", keys)
         res.update(extra)
 

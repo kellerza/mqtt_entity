@@ -5,8 +5,9 @@ import importlib.metadata
 import inspect
 import logging
 import time
+from collections.abc import Callable, Coroutine
 from json import dumps
-from typing import Any, Callable
+from typing import Any
 
 import attrs
 from paho.mqtt.client import Client, MQTTMessage
@@ -14,11 +15,18 @@ from paho.mqtt.enums import CallbackAPIVersion
 from paho.mqtt.reasoncodes import ReasonCode
 
 from .device import MQTTDevice, MQTTOrigin
-from .entities import TopicCallback
 from .utils import load_json
 
 HA_STATUS_TOPIC = "homeassistant/status"
 _LOGGER = logging.getLogger(__name__)
+MQTT_EXPLORER_LIMIT = 2000
+
+type TopicCallback = (
+    Callable[[MQTTClient, str], None]
+    | Callable[[MQTTClient, str, str], None]
+    | Callable[[MQTTClient, str], Coroutine[Any, Any, None]]
+    | Callable[[MQTTClient, str, str], Coroutine[Any, Any, None]]
+)
 
 
 @attrs.define()
@@ -44,8 +52,8 @@ class MQTTAsyncClient:
         self,
         options: Any = None,
         *,
-        username: str | None = None,
-        password: str | None = None,
+        username: str = "",
+        password: str = "",
         host: str = "core-mosquitto",
         port: int = 1883,
         wait_connected: bool = False,
@@ -76,14 +84,15 @@ class MQTTAsyncClient:
     def _mqtt_on_connect(
         self,
         client: Client,
-        _userdata: Any,
-        _flags: Any,
-        _rc: ReasonCode,
-        _prop: Any = None,
+        data: Any,
+        flags: Any,
+        rc: ReasonCode,
+        prop: Any = None,
     ) -> None:
         """MQTT on_connect callback."""
-        if _rc != 0:
-            _LOGGER.error("MQTT: Connection failed with reason code %s", _rc)
+        if rc != 0:
+            _LOGGER.error("MQTT: Connection failed with reason code %s", rc)
+            self.connect_time = -1  # failed
             return
         _LOGGER.info("MQTT: Connected")
         # publish online (Last will sets offline on disconnect)
@@ -98,13 +107,15 @@ class MQTTAsyncClient:
         if self.client.is_connected():
             return
         if self.connect_time == 0:
-            raise RuntimeError("MQTT: Not connected")
+            raise RuntimeError("MQTT: Call connect first")
         _LOGGER.debug("MQTT: Waiting for connection...")
         while True:
             if self.client.is_connected():
                 return
             await asyncio.sleep(0.1)
             if time.time() > self.connect_time:
+                if self.connect_time < 0:
+                    raise ConnectionError("MQTT: Connection failed")
                 msg = "MQTT: Connection timeout (5s)"
                 _LOGGER.error(msg)
                 raise ConnectionError(msg)
@@ -113,10 +124,31 @@ class MQTTAsyncClient:
         """Stop the MQTT client."""
 
         def _stop() -> None:
-            """Do not disconnect, we want the broker to always publish will."""
+            """Do not disconnect, allow the broker to publish LWT message."""
             self.client.loop_stop()
 
         await asyncio.get_running_loop().run_in_executor(None, _stop)
+
+    def publish_args(
+        self, topic: str, payload: str | None, qos: int, retain: bool
+    ) -> tuple[str, str | None, int, bool]:
+        """Prep publish parameters."""
+        if not topic:
+            raise ValueError(f"MQTT: Cannot publish to empty topic (payload={payload})")
+        if not isinstance(qos, int):
+            qos = 0
+        if retain:
+            qos = 1
+        _LOGGER.debug(
+            "MQTT: Publish %s%s %s, %s", qos, "R" if retain else "", topic, payload
+        )
+        if payload and len(payload) > MQTT_EXPLORER_LIMIT:
+            _LOGGER.info(
+                "MQTT: Payload >%s: %s (MQTTExplorer will truncate the message)",
+                MQTT_EXPLORER_LIMIT,
+                len(payload),
+            )
+        return (topic, payload, qos, bool(retain))
 
     async def publish(
         self,
@@ -126,23 +158,10 @@ class MQTTAsyncClient:
         retain: bool = False,
     ) -> None:
         """Publish a MQTT message."""
-        if not topic:
-            raise ValueError(f"MQTT: Cannot publish to empty topic (payload={payload})")
-        if not isinstance(qos, int):
-            qos = 0
-        if retain:
-            qos = 1
+        args = self.publish_args(topic, payload, qos, retain)
         await self.wait_connected()
-        _LOGGER.debug(
-            "MQTT: Publish %s%s %s, %s", qos, "R" if retain else "", topic, payload
-        )
-        if payload and len(payload) > 20000:
-            _LOGGER.info(
-                "MQTT: Payload >20000: %s (MQTTExplorer will truncate the message)",
-                len(payload),
-            )
         await asyncio.get_running_loop().run_in_executor(
-            None, self.client.publish, topic, payload, qos, bool(retain)
+            None, self.client.publish, *args
         )
 
     def topic_unsubscribe(self, topic: str) -> None:
@@ -153,7 +172,6 @@ class MQTTAsyncClient:
 
     def topic_subscribe(self, topic: str, callback: TopicCallback) -> None:
         """Add a topic to the topic callbacks."""
-
         if topic in self.topics_subscribed:
             _LOGGER.warning("MQTT: Topic %s already subscribed", topic)
             return
@@ -162,7 +180,7 @@ class MQTTAsyncClient:
         loop = asyncio.get_running_loop()
 
         def cb(_client: Client, _userdata: Any, message: MQTTMessage) -> None:
-            """Callback for the topic."""
+            """Topic's callback."""
             payload = message.payload.decode("utf-8")
             _LOGGER.debug(
                 "MQTT: Callback for topic %s, payload %s",
@@ -181,18 +199,11 @@ class MQTTAsyncClient:
         self.client.message_callback_add(topic, cb)
         self.topics_subscribed[topic] = cb
 
-    def _mqtt_on_message(
-        self,
-        _client: Client,
-        _userdata: Any,
-        message: MQTTMessage,
-    ) -> None:
-        """MQTT on_message callback."""
-        topic = message.topic
-        payload = message.payload.decode("utf-8")
-        _LOGGER.warning(
-            "MQTT: Unhandled msg received on topic %s with payload %s", topic, payload
-        )
+    def _mqtt_on_message(self, c: Client, userdata: Any, message: MQTTMessage) -> None:
+        """MQTT on_message fallback."""
+        t = message.topic
+        p = message.payload.decode("utf-8")
+        _LOGGER.warning("MQTT: Unhandled msg received. Topic %s with payload %s", t, p)
 
 
 @attrs.define()
@@ -225,11 +236,11 @@ class MQTTClient(MQTTAsyncClient):
             _LOGGER.warning(
                 "MQTT: Your entities will be unavailable if HA restarts",
             )
-            _loop.create_task(self.publish_discovery_info())
+            _loop.create_task(self.publish_discovery_info())  # noqa: RUF006
 
         timeout = _loop.call_later(10, _timeout)
 
-        async def _online_cb(payload_s: str) -> None:
+        async def _online_cb(client: MQTTClient, payload_s: str) -> None:
             """Republish discovery info."""
             if payload_s != "online":
                 _LOGGER.warning(
@@ -267,7 +278,7 @@ class MQTTClient(MQTTAsyncClient):
                 ),
             )
             disco_payload = dumps(disco_dict)
-            if len(disco_payload) > 20000:  # 20000 is the MQTT Explorer limit
+            if len(disco_payload) > MQTT_EXPLORER_LIMIT:
                 disco_payload = dumps(disco_dict, indent=None, separators=(",", ":"))
             await self.publish(disco_topic, disco_payload)
 
@@ -286,8 +297,8 @@ class MQTTClient(MQTTAsyncClient):
         Publish discovery topics on "homeassistant/(sensor|switch)/{device_id}/{sensor_id}/config"
         """
 
-        async def cb_migrate(payload_s: str, topic: str) -> None:
-            """Callback to remove the device."""
+        async def cb_migrate(client: MQTTClient, payload_s: str, topic: str) -> None:
+            """Migrate to device based discovery."""
             if not payload_s:
                 return
             payload = load_json(payload_s)
@@ -301,7 +312,9 @@ class MQTTClient(MQTTAsyncClient):
         def cb_remove(dev: MQTTDevice) -> TopicCallback:
             """Create a callback for the device."""
 
-            async def _cb_remove(payload_s: str, topic: str) -> None:
+            async def _cb_remove(
+                client: MQTTClient, payload_s: str, topic: str
+            ) -> None:
                 if not payload_s:
                     return
                 payload = load_json(payload_s)

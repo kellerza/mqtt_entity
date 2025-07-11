@@ -17,7 +17,7 @@ from mqtt_entity.device import MQTTOrigin
 def test_ent() -> None:
     """Test entity."""
     with pytest.raises(TypeError) as err:
-        MQTTEntity()  # type: ignore
+        MQTTEntity()  # type: ignore[call-arg]
     assert "unique_id" in str(err)
     assert "state_topic" in str(err)
     assert "name" in str(err)
@@ -27,21 +27,21 @@ def test_ent() -> None:
         "name": "a",
     }
     with pytest.raises(TypeError) as err:
-        MQTTEntity(**kwa)  # type: ignore
+        MQTTEntity(**kwa)  # type: ignore[arg-type]
     assert " MQTTEntity directly" in str(err)
     # with pytest.raises(TypeError) as err:
-    #     RWEntity(command_topic="/a", **kwa)  # type: ignore
+    #     RWEntity(command_topic="/a", **kwa)  # type: ignore[arg-type]
     #     assert " RWEntity directly" in str(err)
     with pytest.raises(ValueError) as err2:
-        MQTTNumberEntity(**kwa)  # type: ignore
+        MQTTNumberEntity(**kwa)  # type: ignore[arg-type]
     assert "command_topic" in str(err2)
-    MQTTNumberEntity(command_topic="/a", **kwa)  # type: ignore
+    MQTTNumberEntity(command_topic="/a", **kwa)  # type: ignore[arg-type]
 
 
 def test_dev() -> None:
     """Test device."""
     with pytest.raises(TypeError):
-        MQTTDevice()  # type: ignore
+        MQTTDevice()  # type: ignore[call-arg]
     with pytest.raises(ValueError):
         MQTTDevice(identifiers=[], components={})
     MQTTDevice(identifiers=["123"], components={})

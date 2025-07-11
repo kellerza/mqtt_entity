@@ -1,9 +1,10 @@
-"""Example Options for HASS addon. Extend Options"""
+"""Example Options for HASS addon. Extend Options."""
 
 import logging
 import os
 import typing as t
 from json import load, loads
+from json.decoder import JSONDecodeError
 from pathlib import Path
 
 import attrs
@@ -42,10 +43,14 @@ class AddonOptions:
             val = os.getenv(att.name.upper())
             if not val:
                 continue
-            if t.get_origin(att.type) is list:
-                res[att.name.lower()] = loads(val) if "[" in val else val.split(",")
+            name = att.name.lower()
+            if att.type is list or t.get_origin(att.type) is list:
+                try:
+                    res[name] = loads(val)
+                except JSONDecodeError:
+                    res[name] = val.split(",")
                 continue
-            res[att.name.lower()] = val
+            res[name] = val
         if res:
             self.load_dict(
                 res,
@@ -104,7 +109,7 @@ CONVERTER = Converter(forbid_extra_keys=True)
 
 def structure_ensure_lowercase_keys(cls: type) -> t.Callable[[t.Any, t.Any], t.Any]:
     """Convert any uppercase keys to lowercase."""
-    struct = make_dict_structure_fn(cls, CONVERTER)  # type: ignore
+    struct = make_dict_structure_fn(cls, CONVERTER)  # type: ignore[var-annotated]
 
     def structure(d: dict[str, t.Any], cl: t.Any) -> t.Any:
         lower = [k for k in d if k.lower() != k]

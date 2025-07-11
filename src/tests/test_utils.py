@@ -16,7 +16,7 @@ def test_load_dict() -> None:
 def test_required() -> None:
     """Test required."""
     with pytest.raises(TypeError):
-        required(None, None, None)  # type:ignore
+        required(None, None, None)  # type:ignore[arg-type]
 
 
 def test_tostr() -> None:

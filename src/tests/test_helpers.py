@@ -45,7 +45,7 @@ def test_helpers() -> None:
 
 
 def test_type() -> None:
-    """Typedict"""
+    """Typedict."""
     res: MQTTEntityOptions = {
         "name": "aa",
         "unique_id": "abc123",

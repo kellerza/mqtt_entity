@@ -7,6 +7,9 @@ from typing import Any
 
 from attrs import Attribute
 
+BOOL_ON = "ON"
+BOOL_OFF = "OFF"
+
 
 def load_json(msg: str | None) -> dict[str, Any] | str:
     """Load a JSON string into a dictionary."""
@@ -22,13 +25,9 @@ def load_json(msg: str | None) -> dict[str, Any] | str:
 
 
 def required(_obj: Any, attr_obj: "Attribute[Any]", val: Any) -> None:
-    """An attrs property validator, mostly used in child classes."""
+    """Ensure an attrs.field is present."""
     if val is None:
         raise TypeError(f"Argument '{getattr(attr_obj, 'name', '')}' missing")
-
-
-BOOL_ON = "ON"
-BOOL_OFF = "OFF"
 
 
 def tostr(val: Any) -> str:

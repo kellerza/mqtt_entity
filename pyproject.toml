@@ -27,7 +27,6 @@ options = [
 [dependency-groups]
 dev = [
   "mypy>=1,<2",
-  "pylint>=3,<4",
   "pytest-asyncio",
   "pytest-cov",
   "pytest-env",
@@ -45,9 +44,8 @@ build-backend = "uv_build"
 source-exclude = [".mypy_cache", "src/tests"]
 
 [tool.ruff]
-# Assume Python 3.12
 target-version = "py312"
-src = ["src"]
+#src = ["src"]
 
 [tool.ruff.format]
 quote-style = "double"
@@ -58,28 +56,38 @@ docstring-code-format = true
 docstring-code-line-length = "dynamic"
 
 [tool.ruff.lint]
-select = ["F", "E", "W", "I001"]
-ignore = ["E203", "E501"]
+select = [
+    "A",     # flake8-builtins
+    "ASYNC", # flake8-async
+    "B",     # bugbear
+    "D",     # pydocstyle
+    "E",     # pycodestyle
+    "F",     # pyflakes
+    "I",     # isort
+    "PGH",   # pygrep-hooks
+    "PIE",   # flake8-pie
+    "PL",    # pylint
+    "PTH",   # flake8-pathlib
+    "PYI",   # flake8-pyi
+    "RUF",   # ruff
+    "UP",    # pyupgrade
+    "W",     # pycodestyle
+]
+ignore = ["E203", "E501", "D203", "D213", "PLR2004"]
+
+[tool.ruff.lint.pylint]
+max-args = 7
 
 [tool.mypy]
 disallow_untyped_defs = true
 ignore_missing_imports = true
 warn_unused_configs = true
 exclude = ["build"]
+enable_error_code = ["ignore-without-code"]
 
 [[tool.mypy.overrides]]
 module = "tests.*"
 disallow_untyped_defs = true
-
-# https://stackoverflow.com/questions/64162504/settings-for-pylint-in-setup-cfg-are-not-getting-used
-[tool.pylint.'MESSAGES CONTROL']
-max-line-length = 120
-good-names = ["db", "fr", "cr", "k", "i", "ui", "si", "ri", "j"]
-enable = ["W", "E", "F"]
-disable = ["R", "unused-argument"]
-
-[tool.pylint.design]
-max-returns = 8
 
 [tool.pytest.ini_options]
 pythonpath = [".", "src"]
@@ -96,9 +104,6 @@ env = [
   "MQTT_PASSWORD=hass123",
   "MQTT_USERNAME=hass",
 ]
-
-[tool.setuptools.package-data]
-"rfr" = ["*.jinja*"]
 
 [tool.semantic_release]
 commit = true

@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable, Sequence
 from json import dumps
-from typing import TYPE_CHECKING, Any, Callable, Coroutine, Sequence
+from typing import TYPE_CHECKING, Any
 
 import attrs
 from attrs import validators
@@ -12,16 +13,7 @@ from .helpers import as_dict
 from .utils import BOOL_OFF, BOOL_ON, required, tostr
 
 if TYPE_CHECKING:
-    from .client import MQTTClient
-
-# pylint: disable=too-few-public-methods, too-many-instance-attributes
-
-type TopicCallback = (
-    Callable[[str], None]
-    | Callable[[str, str], None]
-    | Callable[[str], Coroutine[Any, Any, None]]
-    | Callable[[str, str], Coroutine[Any, Any, None]]
-)
+    from .client import MQTTClient, TopicCallback
 
 
 @attrs.define()
@@ -36,11 +28,7 @@ class MQTTBaseEntity:
     @property
     def as_discovery_dict(self) -> dict[str, Any]:
         """Discovery dict."""
-        res = as_dict(self)
-        # platform required for device based discovery
-        if not res.get("platform") and hasattr(self, "_path"):
-            res["platform"] = getattr(self, "_path")
-        return res
+        return as_dict(self)
 
 
 @attrs.define()
@@ -77,7 +65,7 @@ class MQTTEntity(MQTTBaseEntity):
     discovery_extra: dict[str, Any] = attrs.field(factory=dict)
     """Additional MQTT Discovery attributes."""
 
-    _path = ""
+    platform = ""
 
     async def send_state(
         self, client: MQTTClient, payload: Any, *, retain: bool = False
@@ -95,10 +83,17 @@ class MQTTEntity(MQTTBaseEntity):
 
     def __attrs_post_init__(self) -> None:
         """Init the class."""
-        if not self._path:
+        if not self.platform:
             raise TypeError(f"Do not instantiate {self.__class__.__name__} directly")
         if not self.state_class and self.device_class == "energy":
             self.state_class = "total_increasing"
+
+    @property
+    def as_discovery_dict(self) -> dict[str, Any]:
+        """Discovery dict."""
+        res = super().as_discovery_dict
+        res.setdefault("platform", self.platform)
+        return res
 
 
 @attrs.define()
@@ -112,8 +107,6 @@ class MQTTDeviceTrigger(MQTTBaseEntity):
     subtype: str
     payload: str
     topic: str
-
-    _path = "device_automation"
 
     @property
     def name(self) -> str:
@@ -148,7 +141,7 @@ class MQTTRWEntity(MQTTEntity):
     )
     on_command: Callable | None = None
 
-    _path = "text"
+    platform = "text"
 
     @property
     def topic_callbacks(self) -> dict[str, TopicCallback]:
@@ -164,12 +157,12 @@ class MQTTSensorEntity(MQTTEntity):
     """A Home Assistant Sensor entity."""
 
     force_update: bool = False
-    """Sends update events even if the value hasn’t changed. Useful if you want to have
+    """Sends update events even if the value hasn't changed. Useful if you want to have
     meaningful value graphs in history."""
     suggested_display_precision: int = 0
-    """The number of decimals which should be used in the sensor’s state after rounding."""
+    """The number of decimals which should be used in the sensor's state after rounding."""
 
-    _path = "sensor"
+    platform = "sensor"
 
 
 @attrs.define()
@@ -179,7 +172,7 @@ class MQTTBinarySensorEntity(MQTTEntity):
     payload_on: str = BOOL_ON
     payload_off: str = BOOL_OFF
 
-    _path = "binary_sensor"
+    platform = "binary_sensor"
 
 
 @attrs.define()
@@ -188,7 +181,7 @@ class MQTTSelectEntity(MQTTRWEntity):
 
     options: Sequence[str] = attrs.field(default=None, validator=required)
 
-    _path = "select"
+    platform = "select"
 
 
 @attrs.define()
@@ -198,14 +191,14 @@ class MQTTSwitchEntity(MQTTRWEntity):
     payload_on: str = BOOL_ON
     payload_off: str = BOOL_OFF
 
-    _path = "switch"
+    platform = "switch"
 
 
 @attrs.define()
 class MQTTTextEntity(MQTTRWEntity):
     """A Home Assistant Switch entity."""
 
-    _path = "text"
+    platform = "text"
 
 
 @attrs.define()
@@ -228,7 +221,7 @@ class MQTTLightEntity(MQTTRWEntity):
     hs_command_topic: str = ""
     on_hs_change: TopicCallback | None = None
 
-    _path = "light"
+    platform = "light"
 
     async def send_brightness(
         self, client: MQTTClient, brightness: int, *, retain: bool = False
@@ -283,6 +276,6 @@ class MQTTNumberEntity(MQTTRWEntity):
     step: float = 1.0
 
     suggested_display_precision: int = 0
-    """The number of decimals which should be used in the sensor’s state after rounding."""
+    """The number of decimals which should be used in the sensor's state after rounding."""
 
-    _path = "number"
+    platform = "number"
