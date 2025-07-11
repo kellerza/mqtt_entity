@@ -30,7 +30,7 @@ def test_load_env() -> None:
     assert res
 
     for environ in (
-        {"LST": '["1", "2", "3"]', "num": "5"},
+        {"LST": '["1", "2", "3"]', "NUM": "5"},
         {"LST": "1,2,3", "NUM": "5"},
     ):
         opt = LoadEnvClass()
