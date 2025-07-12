@@ -1,6 +1,6 @@
 """MQTT entities."""
 
-# from __future__ import annotations
+from __future__ import annotations
 
 from collections.abc import Callable, Sequence
 from json import dumps
