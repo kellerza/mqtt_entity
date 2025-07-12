@@ -19,13 +19,13 @@ from .utils import load_json
 
 HA_STATUS_TOPIC = "homeassistant/status"
 _LOGGER = logging.getLogger(__name__)
-MQTT_EXPLORER_LIMIT = 2000
+MQTT_EXPLORER_LIMIT = 20000
 
 type TopicCallback = (
-    Callable[[MQTTClient, str], None]
-    | Callable[[MQTTClient, str, str], None]
-    | Callable[[MQTTClient, str], Coroutine[Any, Any, None]]
-    | Callable[[MQTTClient, str, str], Coroutine[Any, Any, None]]
+    Callable[[str], None]
+    | Callable[[str, str], None]
+    | Callable[[str], Coroutine[Any, Any, None]]
+    | Callable[[str, str], Coroutine[Any, Any, None]]
 )
 
 
@@ -179,7 +179,7 @@ class MQTTAsyncClient:
         paramc = len(inspect.signature(callback).parameters)
         loop = asyncio.get_running_loop()
 
-        def cb(_client: Client, _userdata: Any, message: MQTTMessage) -> None:
+        def cb(client: Client, _userdata: Any, message: MQTTMessage) -> None:
             """Topic's callback."""
             payload = message.payload.decode("utf-8")
             _LOGGER.debug(
@@ -187,12 +187,12 @@ class MQTTAsyncClient:
                 message.topic,
                 payload or '""',
             )
-            args = (payload,) if paramc == 1 else (payload, message.topic)
+            args = [] if paramc == 1 else [message.topic]
             if inspect.iscoroutinefunction(callback):
-                coro = callback(*args)
+                coro = callback(payload, *args)
                 loop.call_soon_threadsafe(lambda: loop.create_task(coro))
             else:
-                callback(*args)
+                callback(payload, *args)
 
         _LOGGER.debug("MQTT: Add callback for topic %s", topic)
         self.client.subscribe(topic)
@@ -240,7 +240,7 @@ class MQTTClient(MQTTAsyncClient):
 
         timeout = _loop.call_later(10, _timeout)
 
-        async def _online_cb(client: MQTTClient, payload_s: str) -> None:
+        async def _online_cb(payload_s: str) -> None:
             """Republish discovery info."""
             if payload_s != "online":
                 _LOGGER.warning(
@@ -297,7 +297,7 @@ class MQTTClient(MQTTAsyncClient):
         Publish discovery topics on "homeassistant/(sensor|switch)/{device_id}/{sensor_id}/config"
         """
 
-        async def cb_migrate(client: MQTTClient, payload_s: str, topic: str) -> None:
+        async def cb_migrate(payload_s: str, topic: str) -> None:
             """Migrate to device based discovery."""
             if not payload_s:
                 return
@@ -312,9 +312,7 @@ class MQTTClient(MQTTAsyncClient):
         def cb_remove(dev: MQTTDevice) -> TopicCallback:
             """Create a callback for the device."""
 
-            async def _cb_remove(
-                client: MQTTClient, payload_s: str, topic: str
-            ) -> None:
+            async def _cb_remove(payload_s: str, topic: str) -> None:
                 if not payload_s:
                     return
                 payload = load_json(payload_s)

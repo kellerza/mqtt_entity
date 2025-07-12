@@ -51,7 +51,7 @@ async def test_mqtt_server() -> None:
     loop = asyncio.get_running_loop()
     tasks = list[asyncio.Task]()
 
-    async def select_select(c: MQTTClient, msg: str) -> None:
+    async def select_select(msg: str) -> None:
         _LOGGER.error("onchange start: %s", msg)
         await sense_ent.send_state(mqc, f"select 1={msg} --> 2")
         await select_ent2.send_state(mqc, msg)

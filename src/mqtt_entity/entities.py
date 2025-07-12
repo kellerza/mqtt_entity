@@ -1,6 +1,6 @@
 """MQTT entities."""
 
-from __future__ import annotations
+# from __future__ import annotations
 
 from collections.abc import Callable, Sequence
 from json import dumps
@@ -13,7 +13,7 @@ from .helpers import as_dict
 from .utils import BOOL_OFF, BOOL_ON, required, tostr
 
 if TYPE_CHECKING:
-    from .client import MQTTClient, TopicCallback
+    from .client import MQTTAsyncClient, TopicCallback
 
 
 @attrs.define()
@@ -68,13 +68,17 @@ class MQTTEntity(MQTTBaseEntity):
     platform = ""
 
     async def send_state(
-        self, client: MQTTClient, payload: Any, *, retain: bool = False
+        self, client: MQTTAsyncClient, payload: Any, *, retain: bool = False
     ) -> None:
         """Publish the state to the MQTT state topic."""
         await client.publish(self.state_topic, tostr(payload), retain=retain)
 
     async def send_json_attributes(
-        self, client: MQTTClient, attributes: dict[str, Any], *, retain: bool = True
+        self,
+        client: MQTTAsyncClient,
+        attributes: dict[str, Any],
+        *,
+        retain: bool = True,
     ) -> None:
         """Publish the attributes to the MQTT JSON attributes topic."""
         await client.publish(
@@ -113,7 +117,7 @@ class MQTTDeviceTrigger(MQTTBaseEntity):
         """Return the name of the trigger."""
         return f"{self.type} {self.subtype}".strip()
 
-    async def send_trigger(self, client: MQTTClient) -> None:
+    async def send_trigger(self, client: MQTTAsyncClient) -> None:
         """Publish the state to the MQTT state topic."""
         await client.publish(self.topic, self.payload or "1")
 
@@ -224,7 +228,7 @@ class MQTTLightEntity(MQTTRWEntity):
     platform = "light"
 
     async def send_brightness(
-        self, client: MQTTClient, brightness: int, *, retain: bool = False
+        self, client: MQTTAsyncClient, brightness: int, *, retain: bool = False
     ) -> None:
         """Publish the brightness to the MQTT brightness command topic."""
         await client.publish(
@@ -234,7 +238,7 @@ class MQTTLightEntity(MQTTRWEntity):
         )
 
     async def send_effect(
-        self, client: MQTTClient, effect: str, *, retain: bool = False
+        self, client: MQTTAsyncClient, effect: str, *, retain: bool = False
     ) -> None:
         """Publish the effect to the MQTT effect command topic."""
         await client.publish(
@@ -244,7 +248,7 @@ class MQTTLightEntity(MQTTRWEntity):
         )
 
     async def send_hs(
-        self, client: MQTTClient, hs: tuple[float, float], *, retain: bool = False
+        self, client: MQTTAsyncClient, hs: tuple[float, float], *, retain: bool = False
     ) -> None:
         """Publish the hue and saturation to the MQTT hs command topic."""
         await client.publish(
