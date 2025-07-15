@@ -11,16 +11,18 @@ keywords = [
     "mqtt",
     "library",
     "discovery",
-    "asyncio"
+    "asyncio",
 ]
 dependencies = [
     "attrs>=25,<26",
-    "paho-mqtt>=2.1.0,<3"
+    "paho-mqtt>=2.1.0,<3",
+    "aiohttp>3.12,<4"
 ]
 
 [project.optional-dependencies]
 options = [
   "cattrs>=25,<26",
+  "colorlog",
   "pyyaml>=6,<7",
 ]
 

@@ -1,11 +1,13 @@
 """Utilities."""
 
+import logging
 from json import loads
 from json.decoder import JSONDecodeError
 from math import modf
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from attrs import Attribute
+if TYPE_CHECKING:
+    import attrs
 
 BOOL_ON = "ON"
 BOOL_OFF = "OFF"
@@ -24,7 +26,33 @@ def load_json(msg: str | None) -> dict[str, Any] | str:
     return str(msg)
 
 
-def required(_obj: Any, attr_obj: "Attribute[Any]", val: Any) -> None:
+def logging_color(*, debug: bool = False, force: bool = True) -> None:
+    """Enable color logging."""
+    try:
+        import colorlog  # noqa: PLC0415
+
+        handler = colorlog.StreamHandler()
+        handler.setFormatter(
+            colorlog.ColoredFormatter(
+                "[%(asctime)s] %(log_color)s%(levelname)-7s%(reset)s %(message)s",
+                datefmt="%H:%M:%S",
+                reset=False,
+            )
+        )
+        logging.basicConfig(
+            level=logging.DEBUG if debug else logging.INFO,
+            handlers=[handler],
+            force=force,
+        )
+    except ModuleNotFoundError:
+        logging.basicConfig(
+            format="%(asctime)s %(levelname)-7s %(name)s %(message)s",
+            level=logging.DEBUG if debug else logging.INFO,
+            force=force,
+        )
+
+
+def required(_obj: Any, attr_obj: "attrs.Attribute[Any]", val: Any) -> None:
     """Ensure an attrs.field is present."""
     if val is None:
         raise TypeError(f"Argument '{getattr(attr_obj, 'name', '')}' missing")

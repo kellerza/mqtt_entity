@@ -1,5 +1,6 @@
 """Example Options for HASS addon. Extend Options."""
 
+import asyncio
 import logging
 import os
 import typing as t
@@ -11,6 +12,9 @@ import attrs
 from cattrs import Converter, transform_error
 from cattrs.gen import make_dict_structure_fn
 from yaml import safe_load
+
+from . import supervisor
+from .utils import logging_color
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -61,12 +65,7 @@ class AddonOptions:
 
     def init_addon(self) -> None:
         """Initialize options from environment variables and config files & setup the logger."""
-        logging.basicConfig(
-            format="%(asctime)s %(levelname)-7s %(message)s",
-            level=logging.INFO,
-            force=True,
-            datefmt="%H:%M:%S",
-        )
+        logging_color()
 
         env_ok = self.load_env()
 
@@ -87,11 +86,10 @@ class AddonOptions:
                 self.load_dict(opt)
 
         if getattr(self, "debug", 0):
-            logging.basicConfig(
-                format="%(asctime)s %(levelname)-7s %(name)s %(message)s",
-                level=logging.DEBUG,
-                force=True,
-            )
+            logging_color(debug=True)
+
+
+MQFAIL = "MQTT: Failed to get MQTT service details from the Supervisor"
 
 
 @attrs.define()
@@ -102,6 +100,30 @@ class MQTTOptions(AddonOptions):
     mqtt_port: int = 1883
     mqtt_username: str = ""
     mqtt_password: str = ""
+
+    def init_addon(self) -> None:
+        """Initialize MQTT options from environment variables and config files."""
+        super().init_addon()
+
+        # Don't warn if MQTT password is set
+        if not supervisor.token(warn=False):
+            _LOGGER.log(
+                logging.DEBUG if self.mqtt_password else logging.WARNING, MQFAIL
+            )
+            return
+
+        data: dict[str, t.Any] | None = asyncio.run(supervisor.get("/services/mqtt"))
+        if not data:
+            return
+
+        try:
+            data = t.cast(dict[str, t.Any], data["data"])
+            self.mqtt_host = data["host"]
+            self.mqtt_port = data["port"]
+            self.mqtt_username = data["username"]
+            self.mqtt_password = data["password"]
+        except KeyError as err:
+            _LOGGER.warning("%s: %s %s", MQFAIL, err, data)
 
 
 CONVERTER = Converter(forbid_extra_keys=True)
