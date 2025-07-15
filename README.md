@@ -10,6 +10,7 @@ Updated for device based MQTT discovery.
 Features:
 
 - MQTT client based on paho-mqtt
+  - Retrieve MQTT service info from the Home Assistant Supervisor
 - Manage MQTT discovery info (adding/removing entities)
 - MQTTDevice class to manage devices
   - Availability management
@@ -23,7 +24,7 @@ Features:
   - Configuration modeled as attrs classes
     - Load from environment variables, HA's options.yaml or options.json
     - MQTT connection settings
-  - Enable add-on logging (& debug by config)
+  - Enable add-on logging (incl colors & debug by config)
 
 ## Why?
 
