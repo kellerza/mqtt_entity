@@ -1,6 +1,5 @@
 """Example Options for HASS addon. Extend Options."""
 
-import asyncio
 import logging
 import os
 import typing as t
@@ -63,7 +62,7 @@ class AddonOptions:
             )
         return bool(res)
 
-    def init_addon(self) -> None:
+    async def init_addon(self) -> None:
         """Initialize options from environment variables and config files & setup the logger."""
         logging_color()
 
@@ -101,9 +100,9 @@ class MQTTOptions(AddonOptions):
     mqtt_username: str = ""
     mqtt_password: str = ""
 
-    def init_addon(self) -> None:
+    async def init_addon(self) -> None:
         """Initialize MQTT options from environment variables and config files."""
-        super().init_addon()
+        await super().init_addon()
 
         # Don't warn if MQTT password is set
         if not supervisor.token(warn=False):
@@ -112,7 +111,7 @@ class MQTTOptions(AddonOptions):
             )
             return
 
-        data: dict[str, t.Any] | None = asyncio.run(supervisor.get("/services/mqtt"))
+        data = await supervisor.get("/services/mqtt")
         if not data:
             return
 
