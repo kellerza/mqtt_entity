@@ -20,10 +20,10 @@ Features:
   - Read & write: Select, Switch, Number, Text, Light
   - MQTT device events
 - Asyncio based
-- Helper for Home Assistant add-ons (optional)
-  - Configuration modeled as attrs classes
+- Helpers for Home Assistant add-ons (optional)
+  - Add-on configuration modeled as attrs classes
     - Load from environment variables, HA's options.yaml or options.json
-    - MQTT connection settings
+    - Load MQTT connection settings from the Supervisor
   - Enable add-on logging (incl colors & debug by config)
 
 ## Why?
