@@ -1,11 +1,14 @@
 """Test helpers."""
 
+import os
+
 from mqtt_entity import MQTTSensorEntity
 from mqtt_entity.helpers import (
     MQTTEntityOptions,
     hass_abbreviate,
     hass_default_rw_icon,
     hass_device_class,
+    hass_share_path,
 )
 
 
@@ -52,3 +55,9 @@ def test_type() -> None:
         "state_topic": "/top",
     }
     MQTTSensorEntity(**res)
+
+
+def test_share_path() -> None:
+    """Test path helpers."""
+    res = hass_share_path("test-addon", create=False)
+    assert res.name == ".data" if os.name == "nt" else "/share/test-addon"

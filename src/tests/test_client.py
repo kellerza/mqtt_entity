@@ -11,6 +11,7 @@ from paho.mqtt.client import Client
 from paho.mqtt.enums import CallbackAPIVersion
 
 from mqtt_entity import MQTTClient, MQTTDevice, MQTTSelectEntity, MQTTSensorEntity
+from mqtt_entity.client import MQTTMatcher2
 from mqtt_entity.options import MQTTOptions
 
 _LOGGER = logging.getLogger(__name__)
@@ -167,3 +168,19 @@ async def test_connect(caplog: pytest.LogCaptureFixture) -> None:
 
         await mqc.publish_discovery_info()
         assert cmock.publish.call_count == 2
+
+
+def test_mqttmatcher() -> None:
+    """Test MQTTMatcher."""
+    m = MQTTMatcher2()
+    m["test/123"] = "a"
+    m["test/456"] = "b"
+    m["/test/789"] = "b"
+
+    assert list(m.iter_match("test/123")) == ["a"]
+    assert list(m.iter_match("/test/123")) == []
+
+    assert list(m.keys()) == ["test/123", "test/456", "/test/789"]
+
+    assert "/test/789" in m
+    assert "test/789" not in m

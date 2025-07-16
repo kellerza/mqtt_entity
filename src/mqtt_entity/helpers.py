@@ -2,7 +2,9 @@
 
 import inspect
 import logging
+import os
 from collections.abc import Iterable
+from pathlib import Path
 from typing import Any, NotRequired, TypedDict
 
 import attrs
@@ -69,6 +71,18 @@ def hass_device_class(*, unit: str) -> str:
         "°C": "temperature",
         "%": "battery",
     }.get(unit, "")
+
+
+def hass_share_path(addon_slug: str, create: bool = True) -> Path:
+    """Get the root folder for data and mysensors."""
+    root = (
+        Path(f"/share/{addon_slug}/")
+        if os.name != "nt"
+        else Path(__name__).parent.parent / ".data"
+    )
+    if create and not root.exists():
+        root.mkdir(parents=True)
+    return root
 
 
 class MQTTEntityOptions(TypedDict):

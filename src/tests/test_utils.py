@@ -2,7 +2,7 @@
 
 import pytest
 
-from mqtt_entity.utils import load_json, required, tostr
+from mqtt_entity.utils import load_json, required, slug, tostr
 
 
 def test_load_dict() -> None:
@@ -17,6 +17,12 @@ def test_required() -> None:
     """Test required."""
     with pytest.raises(TypeError):
         required(None, None, None)  # type:ignore[arg-type]
+
+
+def test_slug() -> None:
+    """Test slug."""
+    assert slug("Test Name") == "test_name"
+    assert slug("Another-Test") == "another_test"
 
 
 def test_tostr() -> None:

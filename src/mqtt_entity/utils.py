@@ -58,6 +58,11 @@ def required(_obj: Any, attr_obj: "attrs.Attribute[Any]", val: Any) -> None:
         raise TypeError(f"Argument '{getattr(attr_obj, 'name', '')}' missing")
 
 
+def slug(name: str) -> str:
+    """Create a slug."""
+    return name.lower().replace(" ", "_").replace("-", "_")
+
+
 def tostr(val: Any) -> str:
     """Convert a value to a string with maximum 3 decimal places."""
     if isinstance(val, str):

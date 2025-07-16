@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 from json import dumps
 from typing import TYPE_CHECKING, Any
 
@@ -143,7 +143,7 @@ class MQTTRWEntity(MQTTEntity):
     command_topic: str = attrs.field(
         default="", validator=(validators.instance_of(str), validators.min_len(2))
     )
-    on_command: Callable | None = None
+    on_command: TopicCallback | None = None
 
     platform = "text"
 

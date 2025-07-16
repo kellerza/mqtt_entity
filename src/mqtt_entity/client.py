@@ -1,17 +1,20 @@
 """MQTTClient."""
 
+from __future__ import annotations
+
 import asyncio
 import importlib.metadata
 import inspect
 import logging
 import time
-from collections.abc import Callable, Coroutine
+from collections.abc import Callable, Coroutine, Generator
 from json import dumps
 from typing import Any
 
 import attrs
 from paho.mqtt.client import Client, MQTTMessage
 from paho.mqtt.enums import CallbackAPIVersion
+from paho.mqtt.matcher import MQTTMatcher
 from paho.mqtt.reasoncodes import ReasonCode
 
 from .device import MQTTDevice, MQTTOrigin
@@ -21,12 +24,12 @@ HA_STATUS_TOPIC = "homeassistant/status"
 _LOGGER = logging.getLogger(__name__)
 MQTT_EXPLORER_LIMIT = 20000
 
-type TopicCallback = (
-    Callable[[str], None]
-    | Callable[[str, str], None]
-    | Callable[[str], Coroutine[Any, Any, None]]
+type SyncTopicCallback = Callable[[str], None] | Callable[[str, str], None]
+type AsyncTopicCallback = (
+    Callable[[str], Coroutine[Any, Any, None]]
     | Callable[[str, str], Coroutine[Any, Any, None]]
 )
+type TopicCallback = SyncTopicCallback | AsyncTopicCallback
 
 
 @attrs.define()
@@ -35,14 +38,16 @@ class MQTTAsyncClient:
 
     availability_topic: str = ""
     client: Client = attrs.field(init=False, repr=False)
-    topics_subscribed: dict[str, Callable] = attrs.field(init=False, repr=False)
-    """All topics subscribed to."""
-
+    suppress_exceptions: bool = True
     connect_time: float = attrs.field(init=False, repr=False)
+
+    _on_message_filtered: MQTTMatcher2 = attrs.field(
+        factory=lambda: MQTTMatcher2(), repr=False
+    )
+    _loop: asyncio.AbstractEventLoop = attrs.field(init=False, repr=False)
 
     def __attrs_post_init__(self) -> None:
         """Init."""
-        self.topics_subscribed = {}
         self.connect_time = 0
         self.client = Client(callback_api_version=CallbackAPIVersion.VERSION2)
         self.client.on_connect = self._mqtt_on_connect
@@ -62,6 +67,7 @@ class MQTTAsyncClient:
         if self.client.is_connected():
             _LOGGER.warning("MQTT: Client connected. Reconnecting...")
         await self.disconnect()  # "Connection Successful" triggered on re-connect
+        self._loop = asyncio.get_running_loop()
 
         if options:
             username = getattr(options, "mqtt_username", username)
@@ -99,7 +105,7 @@ class MQTTAsyncClient:
         if self.availability_topic:
             client.publish(self.availability_topic, "online", retain=True)
         # Subscribe to all existing change handlers (on connect/reconnect)
-        for topic in self.topics_subscribed:
+        for topic in self._on_message_filtered.keys():
             client.subscribe(topic)
 
     async def wait_connected(self) -> None:
@@ -167,43 +173,78 @@ class MQTTAsyncClient:
     def topic_unsubscribe(self, topic: str) -> None:
         """Remove a topic from the topic callbacks."""
         self.client.unsubscribe(topic)
-        self.client.message_callback_remove(topic)
-        self.topics_subscribed.pop(topic, None)
+        self._on_message_filtered.pop(topic)
 
     def topic_subscribe(self, topic: str, callback: TopicCallback) -> None:
         """Add a topic to the topic callbacks."""
-        if topic in self.topics_subscribed:
-            _LOGGER.warning("MQTT: Topic %s already subscribed", topic)
-            return
-
-        paramc = len(inspect.signature(callback).parameters)
-        loop = asyncio.get_running_loop()
-
-        def cb(client: Client, _userdata: Any, message: MQTTMessage) -> None:
-            """Topic's callback."""
-            payload = message.payload.decode("utf-8")
-            _LOGGER.debug(
-                "MQTT: Callback for topic %s, payload %s",
-                message.topic,
-                payload or '""',
-            )
-            args = [] if paramc == 1 else [message.topic]
-            if inspect.iscoroutinefunction(callback):
-                coro = callback(payload, *args)
-                loop.call_soon_threadsafe(lambda: loop.create_task(coro))
-            else:
-                callback(payload, *args)
-
         _LOGGER.debug("MQTT: Add callback for topic %s", topic)
+        self._on_message_filtered[topic] = callback
         self.client.subscribe(topic)
-        self.client.message_callback_add(topic, cb)
-        self.topics_subscribed[topic] = cb
 
     def _mqtt_on_message(self, c: Client, userdata: Any, message: MQTTMessage) -> None:
         """MQTT on_message fallback."""
-        t = message.topic
-        p = message.payload.decode("utf-8")
-        _LOGGER.warning("MQTT: Unhandled msg received. Topic %s with payload %s", t, p)
+        topic = message.topic
+        payload = message.payload.decode("utf-8")
+        if topic is None:
+            _LOGGER.warning("MQTT: received empty topic, payload: %s", payload)
+            return
+
+        # split sync & async callbacks
+        sync_cbs: list[tuple[SyncTopicCallback, list[str]]] = []
+        async_cbs: list[tuple[AsyncTopicCallback, list[str]]] = []
+        for cb in self._on_message_filtered.iter_match(topic):
+            paramc = len(inspect.signature(cb).parameters)
+            args = [payload] if paramc == 1 else [payload, message.topic]
+            if inspect.iscoroutinefunction(cb):
+                async_cbs.append((cb, args))
+            else:
+                sync_cbs.append((cb, args))  # type:ignore[arg-type]
+
+        if not sync_cbs and not async_cbs:
+            _LOGGER.warning(
+                "MQTT: Unhandled msg received. Topic %s with payload %s", topic, payload
+            )
+            return None
+
+        _LOGGER.debug(
+            "MQTT: topic %s, async callbacks: %s, sync callbacks: %s",
+            topic,
+            [c[0].__name__ for c in async_cbs],
+            [c[0].__name__ for c in sync_cbs],
+        )
+
+        for cb, args in sync_cbs:
+            name = cb.__name__
+            try:
+                _LOGGER.debug("MQTT: Callback %s(%s, topic=%s)", name, payload, topic)
+                cb(*args)
+            except Exception as err:
+                _LOGGER.error(
+                    "MQTT: Exception in callback %s(topic=%s): %s", name, topic, err
+                )
+                if not self.suppress_exceptions:
+                    raise
+
+        if not async_cbs:
+            return
+
+        async def cbs() -> None:
+            """Run async callbacks."""
+            for cb, args in async_cbs:
+                name = cb.__name__
+                try:
+                    _LOGGER.debug(
+                        "MQTT: Callback async %s(%s, topic=%s)", name, payload, topic
+                    )
+                    await cb(*args)
+                except Exception as err:
+                    _LOGGER.error(
+                        "MQTT: Exception in callback %s(topic=%s): %s", name, topic, err
+                    )
+                    if not self.suppress_exceptions:
+                        raise
+
+        self._loop.call_soon_threadsafe(lambda: self._loop.create_task(cbs()))
 
 
 @attrs.define()
@@ -222,7 +263,7 @@ class MQTTClient(MQTTAsyncClient):
 
     def monitor_homeassistant_status(self) -> None:
         """Monitor homeassistant/status & publish discovery info."""
-        if HA_STATUS_TOPIC in self.topics_subscribed:
+        if HA_STATUS_TOPIC in self._on_message_filtered:
             return
         _loop = asyncio.get_running_loop()
 
@@ -337,3 +378,36 @@ class MQTTClient(MQTTAsyncClient):
             topic = f"homeassistant/+/{dev.id}/+/config"
             self.topic_subscribe(topic, cb_migrate if migrate else cb_remove(dev))
             asyncio.get_running_loop().call_later(10, self.topic_unsubscribe, topic)
+
+
+class MQTTMatcher2(MQTTMatcher):
+    """Extend MQTTMatcher to return all keys."""
+
+    def keys(self) -> Generator[str, None, None]:
+        """Return all keys."""
+
+        def iterall(
+            prefix: tuple[str, ...], n: MQTTMatcher.Node
+        ) -> Generator[str, None, None]:
+            """Yield node & children."""
+            if n._content is not None:
+                yield "/".join(prefix)
+            for key, child in n._children.items():
+                yield from iterall((*prefix, key), child)
+
+        yield from iterall(tuple[str](), self._root)
+
+    def __contains__(self, topic: str) -> bool:
+        """Check whether a topic is actively subscribed."""
+        try:
+            next(self.iter_match(topic))
+            return True
+        except StopIteration:
+            return False
+
+    def pop(self, topic: str) -> None:
+        """Remove a topic from the active subscriptions."""
+        try:
+            del self[topic]
+        except KeyError:  # no such subscription
+            pass
