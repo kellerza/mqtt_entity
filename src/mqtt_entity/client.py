@@ -21,7 +21,7 @@ from .device import MQTTDevice, MQTTOrigin
 from .utils import load_json
 
 HA_STATUS_TOPIC = "homeassistant/status"
-_LOGGER = logging.getLogger(__name__)
+_LOG = logging.getLogger(__name__)
 MQTT_EXPLORER_LIMIT = 20000
 
 type SyncTopicCallback = Callable[[str], None] | Callable[[str, str], None]
@@ -65,7 +65,7 @@ class MQTTAsyncClient:
     ) -> None:
         """Connect to MQTT server specified as attributes of the options."""
         if self.client.is_connected():
-            _LOGGER.warning("MQTT: Client connected. Reconnecting...")
+            _LOG.warning("MQTT: Client connected. Reconnecting...")
         await self.disconnect()  # "Connection Successful" triggered on re-connect
         self._loop = asyncio.get_running_loop()
 
@@ -79,7 +79,7 @@ class MQTTAsyncClient:
         if self.availability_topic:
             self.client.will_set(self.availability_topic, "offline", retain=True)
 
-        _LOGGER.info("MQTT: Connecting to %s@%s:%s", username, host, port)
+        _LOG.info("MQTT: Connecting to %s@%s:%s", username, host, port)
         self.client.connect_async(host=host, port=port)
         self.client.loop_start()
         self.connect_time = time.time() + 5
@@ -97,10 +97,10 @@ class MQTTAsyncClient:
     ) -> None:
         """MQTT on_connect callback."""
         if rc != 0:
-            _LOGGER.error("MQTT: Connection failed with reason code %s", rc)
+            _LOG.error("MQTT: Connection failed with reason code %s", rc)
             self.connect_time = -1  # failed
             return
-        _LOGGER.info("MQTT: Connected")
+        _LOG.info("MQTT: Connected")
         # publish online (Last will sets offline on disconnect)
         if self.availability_topic:
             client.publish(self.availability_topic, "online", retain=True)
@@ -114,7 +114,7 @@ class MQTTAsyncClient:
             return
         if self.connect_time == 0:
             raise RuntimeError("MQTT: Call connect first")
-        _LOGGER.debug("MQTT: Waiting for connection...")
+        _LOG.debug("MQTT: Waiting for connection...")
         while True:
             if self.client.is_connected():
                 return
@@ -123,7 +123,7 @@ class MQTTAsyncClient:
                 if self.connect_time < 0:
                     raise ConnectionError("MQTT: Connection failed")
                 msg = "MQTT: Connection timeout (5s)"
-                _LOGGER.error(msg)
+                _LOG.error(msg)
                 raise ConnectionError(msg)
 
     async def disconnect(self) -> None:
@@ -145,11 +145,11 @@ class MQTTAsyncClient:
             qos = 0
         if retain:
             qos = 1
-        _LOGGER.debug(
+        _LOG.debug(
             "MQTT: Publish %s%s %s, %s", qos, "R" if retain else "", topic, payload
         )
         if payload and len(payload) > MQTT_EXPLORER_LIMIT:
-            _LOGGER.info(
+            _LOG.info(
                 "MQTT: Payload >%s: %s (MQTTExplorer will truncate the message)",
                 MQTT_EXPLORER_LIMIT,
                 len(payload),
@@ -177,7 +177,7 @@ class MQTTAsyncClient:
 
     def topic_subscribe(self, topic: str, callback: TopicCallback) -> None:
         """Add a topic to the topic callbacks."""
-        _LOGGER.debug("MQTT: Add callback for topic %s", topic)
+        _LOG.debug("MQTT: Add callback for topic %s", topic)
         self._on_message_filtered[topic] = callback
         self.client.subscribe(topic)
 
@@ -186,7 +186,7 @@ class MQTTAsyncClient:
         topic = message.topic
         payload = message.payload.decode("utf-8")
         if topic is None:
-            _LOGGER.warning("MQTT: received empty topic, payload: %s", payload)
+            _LOG.warning("MQTT: received empty topic, payload: %s", payload)
             return
 
         # split sync & async callbacks
@@ -201,12 +201,12 @@ class MQTTAsyncClient:
                 sync_cbs.append((cb, args))  # type:ignore[arg-type]
 
         if not sync_cbs and not async_cbs:
-            _LOGGER.warning(
+            _LOG.warning(
                 "MQTT: Unhandled msg received. Topic %s with payload %s", topic, payload
             )
             return None
 
-        _LOGGER.debug(
+        _LOG.debug(
             "MQTT: topic %s, async callbacks: %s, sync callbacks: %s",
             topic,
             [c[0].__name__ for c in async_cbs],
@@ -216,10 +216,10 @@ class MQTTAsyncClient:
         for cb, args in sync_cbs:
             name = cb.__name__
             try:
-                _LOGGER.debug("MQTT: Callback %s(%s, topic=%s)", name, payload, topic)
+                _LOG.debug("MQTT: Callback %s(%s, topic=%s)", name, payload, topic)
                 cb(*args)
             except Exception as err:
-                _LOGGER.error(
+                _LOG.error(
                     "MQTT: Exception in callback %s(topic=%s): %s", name, topic, err
                 )
                 if not self.suppress_exceptions:
@@ -233,12 +233,12 @@ class MQTTAsyncClient:
             for cb, args in async_cbs:
                 name = cb.__name__
                 try:
-                    _LOGGER.debug(
+                    _LOG.debug(
                         "MQTT: Callback async %s(%s, topic=%s)", name, payload, topic
                     )
                     await cb(*args)
                 except Exception as err:
-                    _LOGGER.error(
+                    _LOG.error(
                         "MQTT: Exception in callback %s(topic=%s): %s", name, topic, err
                     )
                     if not self.suppress_exceptions:
@@ -268,13 +268,13 @@ class MQTTClient(MQTTAsyncClient):
         _loop = asyncio.get_running_loop()
 
         def _timeout() -> None:
-            _LOGGER.warning(
+            _LOG.warning(
                 "MQTT: Timeout waiting for Home Assistant. The %s topic is empty.\n"
                 "Configure the MQTT integration in Home Assistant to publish a "
                 "last will & testament (online/offline) with the Retain flag set.",
                 HA_STATUS_TOPIC,
             )
-            _LOGGER.warning(
+            _LOG.warning(
                 "MQTT: Your entities will be unavailable if HA restarts",
             )
             _loop.create_task(self.publish_discovery_info())  # noqa: RUF006
@@ -284,12 +284,12 @@ class MQTTClient(MQTTAsyncClient):
         async def _online_cb(payload_s: str) -> None:
             """Republish discovery info."""
             if payload_s != "online":
-                _LOGGER.warning(
+                _LOG.warning(
                     "MQTT: Home Assistant offline. %s = %s", HA_STATUS_TOPIC, payload_s
                 )
                 return
             timeout.cancel()
-            _LOGGER.info(
+            _LOG.info(
                 "MQTT: Home Assistant online. Publish discovery info for %s",
                 [d.name for d in self.devs],
             )
@@ -302,7 +302,7 @@ class MQTTClient(MQTTAsyncClient):
     async def publish_discovery_info(self) -> None:
         """Publish discovery info immediately."""
         if not self.devs:
-            _LOGGER.warning("MQTT: No devices to publish discovery info for")
+            _LOG.warning("MQTT: No devices to publish discovery info for")
             return
 
         if self.clean_entities:
@@ -343,7 +343,7 @@ class MQTTClient(MQTTAsyncClient):
             if not payload_s:
                 return
             payload = load_json(payload_s)
-            _LOGGER.info("MQTT MIGRATE topic %s with payload %s", topic, payload)
+            _LOG.info("MQTT MIGRATE topic %s with payload %s", topic, payload)
             migrate_ok = payload == {"migrate_discovery": True}
             _pl = None if migrate_ok else dumps({"migrate_discovery": True})
             if migrate_ok:
@@ -359,13 +359,13 @@ class MQTTClient(MQTTAsyncClient):
                 payload = load_json(payload_s)
                 # if not part of this device, remove the topic
                 if not isinstance(payload, dict) or "unique_id" not in payload:
-                    _LOGGER.warning(
+                    _LOG.warning(
                         "MQTT CLEAN: No unique_id in payload %s, cannot remove", payload
                     )
                     return
                 uid = payload["unique_id"]
                 if uid not in dev.components:
-                    _LOGGER.info("MQTT: Removing unique ID %s", uid)
+                    _LOG.info("MQTT: Removing unique ID %s", uid)
                     self.client.publish(topic=topic, payload=None, qos=1, retain=True)
 
             return _cb_remove

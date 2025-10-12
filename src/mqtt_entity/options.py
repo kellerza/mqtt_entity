@@ -15,7 +15,7 @@ from yaml import safe_load
 from . import supervisor
 from .utils import logging_color
 
-_LOGGER = logging.getLogger(__name__)
+_LOG = logging.getLogger(__name__)
 
 
 @attrs.define()
@@ -27,11 +27,11 @@ class AddonOptions:
     ) -> None:
         """Structure and copy result to self."""
         try:
-            _LOGGER.log(log_lvl, "%s: %s", log_msg or "Loading config", value)
+            _LOG.log(log_lvl, "%s: %s", log_msg or "Loading config", value)
             val = CONVERTER.structure(value, self.__class__)
         except Exception as exc:
             msg = "Error loading config: " + "\n".join(transform_error(exc))
-            _LOGGER.error(msg)
+            _LOG.error(msg)
             raise ValueError(msg) from None
         for key in value:
             setattr(self, key.lower(), getattr(val, key.lower()))
@@ -75,11 +75,11 @@ class AddonOptions:
         )
         cfg_files = [f for f in (Path(s) for s in cfg_names) if f.exists()]
         if not cfg_files and not env_ok:
-            _LOGGER.error("No config file or environment variables found.")
+            _LOG.error("No config file or environment variables found.")
             os._exit(1)
 
         for fpath in cfg_files:
-            _LOGGER.info("Loading config: %s", fpath)
+            _LOG.info("Loading config: %s", fpath)
             with fpath.open("r", encoding="utf-8") as fptr:
                 opt = load(fptr) if fpath.suffix == ".json" else safe_load(fptr)
                 self.load_dict(opt)
@@ -106,9 +106,7 @@ class MQTTOptions(AddonOptions):
 
         # Don't warn if MQTT password is set
         if not supervisor.token(warn=False):
-            _LOGGER.log(
-                logging.DEBUG if self.mqtt_password else logging.WARNING, MQFAIL
-            )
+            _LOG.log(logging.DEBUG if self.mqtt_password else logging.WARNING, MQFAIL)
             return
 
         data = await supervisor.get("/services/mqtt")
@@ -122,7 +120,7 @@ class MQTTOptions(AddonOptions):
             self.mqtt_username = data["username"]
             self.mqtt_password = data["password"]
         except KeyError as err:
-            _LOGGER.warning("%s: %s %s", MQFAIL, err, data)
+            _LOG.warning("%s: %s %s", MQFAIL, err, data)
 
 
 CONVERTER = Converter(forbid_extra_keys=True)
@@ -136,7 +134,7 @@ def structure_ensure_lowercase_keys(cls: type) -> t.Callable[[t.Any, t.Any], t.A
         lower = [k for k in d if k.lower() != k]
         for k in lower:
             if k.lower() in d:
-                _LOGGER.warning("Key %s already exists in lowercase", k.lower())
+                _LOG.warning("Key %s already exists in lowercase", k.lower())
             d[k.lower()] = d.pop(k)
         return struct(d, cl)
 

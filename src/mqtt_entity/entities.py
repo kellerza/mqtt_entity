@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import warnings
 from collections.abc import Sequence
 from json import dumps
 from typing import TYPE_CHECKING, Any
@@ -40,8 +41,10 @@ class MQTTEntity(MQTTBaseEntity):
     """An ID that uniquely identifies this sensor. If two sensors have the same unique ID,
       Home Assistant will raise an exception. Required when used with device-based discovery."""
     state_topic: str
-    object_id: str = ""
+    object_id: str = attrs.field(default="", metadata={"deprecated": True})
     """Used instead of name for automatic generation of entity_id."""
+    default_entity_id: str = ""
+    """Used instead of name/object_id for automatic generation of entity_id."""
 
     device_class: str = ""
     """The type/class of the sensor to set the icon in the frontend. The device_class can be null."""
@@ -95,6 +98,15 @@ class MQTTEntity(MQTTBaseEntity):
     @property
     def as_discovery_dict(self) -> dict[str, Any]:
         """Discovery dict."""
+        if self.object_id and not self.default_entity_id:
+            warnings.warn(
+                "The 'object_id' field is deprecated and will be removed in a future version. "
+                "Please use 'default_entity_id' instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            self.default_entity_id = self.object_id
+            self.object_id = ""
         res = super().as_discovery_dict
         res.setdefault("platform", self.platform)
         return res

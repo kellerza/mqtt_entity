@@ -14,7 +14,7 @@ from mqtt_entity import MQTTClient, MQTTDevice, MQTTSelectEntity, MQTTSensorEnti
 from mqtt_entity.client import MQTTMatcher2
 from mqtt_entity.options import MQTTOptions
 
-_LOGGER = logging.getLogger(__name__)
+_LOG = logging.getLogger(__name__)
 
 
 @pytest.mark.asyncio
@@ -53,12 +53,12 @@ async def test_mqtt_server() -> None:
     tasks = list[asyncio.Task]()
 
     async def select_select(msg: str) -> None:
-        _LOGGER.error("onchange start: %s", msg)
+        _LOG.error("onchange start: %s", msg)
         await sense_ent.send_state(mqc, f"select 1={msg} --> 2")
         await select_ent2.send_state(mqc, msg)
 
     def select_select2(msg: str) -> None:
-        _LOGGER.error("onchange no async: %s", msg)
+        _LOG.error("onchange no async: %s", msg)
         nonlocal tasks
         tasks = [
             loop.create_task(sense_ent.send_state(mqc, f"select 2={msg} --> 1")),

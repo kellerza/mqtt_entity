@@ -7,7 +7,7 @@ from urllib.parse import urljoin
 
 from aiohttp import ClientSession
 
-_LOGGER = logging.getLogger(__name__)
+_LOG = logging.getLogger(__name__)
 
 MQFAIL = "Supervisor: Failed to get service details from the Supervisor"
 
@@ -21,7 +21,7 @@ def token(warn: bool = True, fail: bool = False) -> str | None:
     """
     token = os.environ.get("SUPERVISOR_TOKEN")
     if not token and warn:
-        _LOGGER.error("Supervisor: No SUPERVISOR_TOKEN. Check addon config.")
+        _LOG.error("Supervisor: No SUPERVISOR_TOKEN. Check addon config.")
         if not fail:
             return None
         raise ValueError("Supervisor: No SUPERVISOR_TOKEN. Check addon config.")
@@ -38,6 +38,6 @@ async def get(url: str) -> dict[str, Any] | None:
     async with ClientSession() as session:
         async with session.get(url, headers=head) as res:
             if res.status != 200:
-                _LOGGER.warning("Supervisor: get %s, response %s", url, res.status)
+                _LOG.warning("Supervisor: get %s, response %s", url, res.status)
                 return None
             return await res.json()

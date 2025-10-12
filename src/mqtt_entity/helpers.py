@@ -9,7 +9,7 @@ from typing import Any, NotRequired, TypedDict
 
 import attrs
 
-_LOGGER = logging.getLogger(__name__)
+_LOG = logging.getLogger(__name__)
 
 
 def as_dict(
@@ -29,7 +29,7 @@ def as_dict(
     extra = getattr(obj, "discovery_extra", None)
     if extra:
         keys = {k: extra[k] for k in extra if k in res and res[k] != extra[k]}
-        _LOGGER.debug("Overwriting %s", keys)
+        _LOG.debug("Overwriting %s", keys)
         res.update(extra)
 
     return res
