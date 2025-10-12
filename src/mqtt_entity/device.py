@@ -6,7 +6,7 @@ import attrs
 from attrs import validators
 
 from .entities import MQTTBaseEntity
-from .helpers import as_dict, hass_abbreviate
+from .helpers import DEVREG_ABBREVIATE, ORIGIN_ABBREVIATE, as_dict, hass_abbreviate
 
 
 @attrs.define()
@@ -20,12 +20,16 @@ class MQTTOrigin:
     """support_url"""
 
 
+M_SHARED = {"shared": True}
+M_DEV = {"dev": True}
+
+
 @attrs.define()
 class MQTTDevice:
     """Base class for MQTT Device Discovery. A Home Assistant Device groups entities."""
 
     identifiers: list[str | tuple[str, Any]] = attrs.field(
-        validator=[validators.instance_of(list), validators.min_len(1)]
+        validator=[validators.instance_of(list), validators.min_len(1)], metadata=M_DEV
     )
 
     components: dict[str, MQTTBaseEntity]
@@ -33,14 +37,20 @@ class MQTTDevice:
     remove_components: dict[str, str] = attrs.field(factory=dict)
     """Components to be removed on discovery. object_id and the platform name."""
 
-    connections: list[str] = attrs.field(factory=list)
-    configuration_url: str = ""
-    manufacturer: str = ""
-    model: str = ""
-    name: str = ""
-    suggested_area: str = ""
-    sw_version: str = ""
-    via_device: str = ""
+    # device options
+    connections: list[str] = attrs.field(factory=list, metadata=M_DEV)
+    configuration_url: str = attrs.field(default="", metadata=M_DEV)
+    manufacturer: str = attrs.field(default="", metadata=M_DEV)
+    model: str = attrs.field(default="", metadata=M_DEV)
+    name: str = attrs.field(default="", metadata=M_DEV)
+    suggested_area: str = attrs.field(default="", metadata=M_DEV)
+    sw_version: str = attrs.field(default="", metadata=M_DEV)
+    via_device: str = attrs.field(default="", metadata=M_DEV)
+
+    # shared options
+    state_topic: str = attrs.field(default="", metadata=M_SHARED)
+    command_topic: str = attrs.field(default="", metadata=M_SHARED)
+    qos: str = attrs.field(default="", metadata=M_SHARED)
 
     @property
     def id(self) -> str:
@@ -57,12 +67,17 @@ class MQTTDevice:
         for key, platform in self.remove_components.items():
             cmps[key] = {"p": cmps[key]["p"] if key in cmps else platform}
 
-        return (
-            f"homeassistant/device/{self.id}/config",
-            {
-                "dev": as_dict(self, exclude=["components", "remove_components"]),
-                "o": as_dict(origin),
-                "avty": {"topic": availability_topic},
-                "cmps": cmps,
-            },
-        )
+        disco_json = {
+            "dev": hass_abbreviate(
+                as_dict(self, metadata_key="dev"), abbreviations=DEVREG_ABBREVIATE
+            ),
+            "o": hass_abbreviate(as_dict(origin), abbreviations=ORIGIN_ABBREVIATE),
+        }
+        if shared := as_dict(self, metadata_key="shared"):
+            disco_json.update(shared)
+
+        if availability_topic:
+            disco_json["avty"] = {"topic": availability_topic}
+        disco_json["cmps"] = cmps
+
+        return f"homeassistant/device/{self.id}/config", disco_json

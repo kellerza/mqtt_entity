@@ -13,16 +13,22 @@ _LOG = logging.getLogger(__name__)
 
 
 def as_dict(
-    obj: attrs.AttrsInstance, exclude: Iterable[str] | None = None
+    obj: attrs.AttrsInstance,
+    exclude: Iterable[str] | None = None,
+    metadata_key: str = "",
 ) -> dict[str, Any]:
     """Represent the object as a dictionary, without empty values and defaults."""
 
     def _filter(atrb: attrs.Attribute, value: Any) -> bool:
+        if not value or atrb.default == value:
+            return False
         if exclude and atrb.name in exclude:
             return False
+        if metadata_key:
+            return bool(atrb.metadata.get(metadata_key))
         if atrb.name in ("discovery_extra",):
             return False
-        return bool(value) and atrb.default != value and not inspect.isfunction(value)
+        return not inspect.isfunction(value)
 
     res = attrs.asdict(obj, filter=_filter)
 
@@ -43,7 +49,7 @@ def hass_abbreviate(
     https://www.home-assistant.io/integrations/mqtt/#supported-abbreviations-in-mqtt-discovery-messages
     """
     if not abbreviations:
-        abbreviations = ABBREVIATIONS
+        abbreviations = ABBREVIATE
     return {abbreviations.get(k, k): v for k, v in result.items()}
 
 
@@ -76,7 +82,7 @@ def hass_device_class(*, unit: str) -> str:
 def hass_share_path(addon_slug: str, create: bool = True) -> Path:
     """Get the root folder for data and mysensors."""
     root = (
-        Path(f"/share/{addon_slug}/")
+        Path("/share") / addon_slug
         if os.name != "nt"
         else Path(__name__).parent.parent / ".data"
     )
@@ -91,7 +97,8 @@ class MQTTEntityOptions(TypedDict):
     name: str
     unique_id: str
     state_topic: str
-    object_id: NotRequired[str]
+    object_id: NotRequired[str]  # deprecated
+    default_entity_id: NotRequired[str]
 
     device_class: NotRequired[str]
     enabled_by_default: NotRequired[bool]
@@ -106,9 +113,13 @@ class MQTTEntityOptions(TypedDict):
     discovery_extra: NotRequired[dict[str, Any]]
 
 
-ABBREVIATIONS = {
-    v: k
-    for k, v in {
+def swapkv(d: dict[str, str]) -> dict[str, str]:
+    """Swap keys and values in a dictionary."""
+    return {v: k for k, v in d.items()}
+
+
+ABBREVIATE = swapkv(
+    {
         "act_t": "action_topic",
         "act_tpl": "action_template",
         "atype": "automation_type",
@@ -150,6 +161,7 @@ ABBREVIATIONS = {
         "cont_type": "content_type",
         "curr_temp_t": "current_temperature_topic",
         "curr_temp_tpl": "current_temperature_template",
+        "def_ent_id": "default_entity_id",
         "dev": "device",
         "dev_cla": "device_class",
         "dir_cmd_t": "direction_command_topic",
@@ -217,7 +229,6 @@ ABBREVIATIONS = {
         "modes": "modes",
         "name": "name",
         "o": "origin",
-        "obj_id": "object_id",
         "off_dly": "off_delay",
         "on_cmd_type": "on_command_type",
         "ops": "options",
@@ -264,8 +275,10 @@ ABBREVIATIONS = {
         "pl_rst_mode": "payload_reset_mode",
         "pl_rst_pct": "payload_reset_percentage",
         "pl_rst_pr_mode": "payload_reset_preset_mode",
+        # "pl_stop": "payload_stop",
         "pl_stop_tilt": "payload_stop_tilt",
         "pl_stpa": "payload_start_pause",
+        # "pl_strt": "payload_start",
         "pl_toff": "payload_turn_off",
         "pl_ton": "payload_turn_on",
         "pl_trig": "payload_trigger",
@@ -368,5 +381,29 @@ ABBREVIATIONS = {
         "xy_cmd_tpl": "xy_command_template",
         "xy_stat_t": "xy_state_topic",
         "xy_val_tpl": "xy_value_template",
-    }.items()
-}
+    }
+)
+
+DEVREG_ABBREVIATE = swapkv(
+    {
+        "cu": "configuration_url",
+        "cns": "connections",
+        "ids": "identifiers",
+        "name": "name",
+        "mf": "manufacturer",
+        "mdl": "model",
+        "mdl_id": "model_id",
+        "hw": "hw_version",
+        "sw": "sw_version",
+        "sa": "suggested_area",
+        "sn": "serial_number",
+    }
+)
+
+ORIGIN_ABBREVIATE = swapkv(
+    {
+        "name": "name",
+        "sw": "sw_version",
+        "url": "support_url",
+    }
+)

@@ -61,7 +61,7 @@ def test_mqtt_entity() -> None:
 
     assert d_topic == "homeassistant/device/123/config"
     assert d_dict == {
-        "dev": {"identifiers": ["123"]},
+        "dev": {"ids": ["123"]},
         "o": {"name": "Test Origin"},
         "avty": {"topic": "/blah"},
         "cmps": {
@@ -91,7 +91,7 @@ def test_discovery_extra() -> None:
 
     assert d_topic == "homeassistant/device/123/config"
     assert d_dict == {
-        "dev": {"identifiers": ["123"]},
+        "dev": {"ids": ["123"]},
         "o": {"name": "Test Origin"},
         "avty": {"topic": "/blah"},
         "cmps": {
@@ -126,7 +126,7 @@ def test_device_trigger() -> None:
     assert d_topic == "homeassistant/device/123/config"
     assert d_dict == {
         "dev": {
-            "identifiers": [
+            "ids": [
                 "123",
                 "456",
             ],
