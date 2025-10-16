@@ -10,10 +10,15 @@ from pathlib import Path
 import attrs
 from cattrs import Converter, transform_error
 from cattrs.gen import make_dict_structure_fn
-from yaml import safe_load
 
 from . import supervisor
 from .utils import logging_color
+
+try:
+    from yaml import safe_load
+except ImportError:
+    safe_load = None  # type: ignore[assignment]
+
 
 _LOG = logging.getLogger(__name__)
 
@@ -80,9 +85,22 @@ class AddonOptions:
 
         for fpath in cfg_files:
             _LOG.info("Loading config: %s", fpath)
+            is_yml, is_json = fpath.suffix in (".yml", ".yaml"), fpath.suffix == ".json"
+            if not (is_yml or is_json):
+                _LOG.error("Unsupported config file type: %s", fpath)
+                continue
+            if is_yml and safe_load is None:
+                _LOG.error("PyYAML not installed, cannot read YAML config: %s", fpath)
+                continue
             with fpath.open("r", encoding="utf-8") as fptr:
-                opt = load(fptr) if fpath.suffix == ".json" else safe_load(fptr)
-                self.load_dict(opt)
+                try:
+                    opt = load(fptr) if is_json else {}
+                    if is_yml and safe_load is not None:
+                        opt = safe_load(fptr)
+                except Exception as err:
+                    _LOG.error("Error parsing config %s: %s", fpath, err)
+                else:
+                    self.load_dict(opt)
 
         if getattr(self, "debug", 0):
             logging_color(debug=True)

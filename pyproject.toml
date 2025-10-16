@@ -1,6 +1,6 @@
 [build-system]
 build-backend = "uv_build"
-requires = [ "uv-build>=0.8.20,<0.9" ]
+requires = [ "uv-build>=0.9,<0.10" ]
 
 [project]
 name = "mqtt-entity"
@@ -15,7 +15,7 @@ keywords = [
   "mqtt",
 ]
 license = { file = "LICENSE" }
-authors = [ { name = "Johann Kellerman", email = "johann.kellerman@nokia.com" } ]
+authors = [ { name = "Johann Kellerman", email = "kellerza@gmail.com" } ]
 requires-python = ">=3.12"
 classifiers = [
   "Programming Language :: Python :: 3 :: Only",
@@ -26,12 +26,12 @@ classifiers = [
 dependencies = [
   "aiohttp>3.12,<4",
   "attrs>=25,<26",
+  "cattrs>=25,<26",
+  "colorlog",
   "paho-mqtt>=2.1,<3",
 ]
 
 optional-dependencies.options = [
-  "cattrs>=25,<26",
-  "colorlog",
   "pyyaml>=6,<7",
 ]
 

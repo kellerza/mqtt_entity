@@ -92,12 +92,11 @@ class MQTTEntity(MQTTBaseEntity):
         """Init the class."""
         if not self.platform:
             raise TypeError(f"Do not instantiate {self.__class__.__name__} directly")
-        if not self.state_class and self.device_class == "energy":
-            self.state_class = "total_increasing"
 
     @property
     def as_discovery_dict(self) -> dict[str, Any]:
         """Discovery dict."""
+        # Migrate object_id to default_entity_id
         if self.object_id and not self.default_entity_id:
             warnings.warn(
                 "The 'object_id' field is deprecated and will be removed in a future version. "
@@ -107,6 +106,15 @@ class MQTTEntity(MQTTBaseEntity):
             )
             self.default_entity_id = self.object_id
             self.object_id = ""
+
+        # Ensure default_entity_id is prefixed with platform
+        if self.default_entity_id and "." not in self.default_entity_id:
+            self.default_entity_id = f"{self.platform}.{self.default_entity_id}"
+
+        # Energy should be total_increasing, unless state_class is explicitly set
+        if not self.state_class and self.device_class == "energy":
+            self.state_class = "total_increasing"
+
         res = super().as_discovery_dict
         res.setdefault("platform", self.platform)
         return res
