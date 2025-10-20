@@ -1,5 +1,6 @@
 """Home Assistant Supervisor helpers."""
 
+import asyncio
 import logging
 import os
 from typing import Any
@@ -28,16 +29,28 @@ def token(warn: bool = True, fail: bool = False) -> str | None:
     return token
 
 
-async def get(url: str) -> dict[str, Any] | None:
+async def get(url: str, log_only: bool = True) -> dict[str, Any] | None:
     """Get json data from the HA Supervisor."""
     url = urljoin("http://supervisor", url)
     head = {
         "Authorization": f"Bearer {token(fail=True)}",
         "content-type": "application/json",
     }
-    async with ClientSession() as session:
-        async with session.get(url, headers=head) as res:
-            if res.status != 200:
-                _LOG.warning("Supervisor: get %s, response %s", url, res.status)
-                return None
-            return await res.json()
+    try:
+        async with asyncio.timeout(10):
+            async with ClientSession() as session:
+                async with session.get(url, headers=head) as res:
+                    if res.status == 200:
+                        return await res.json()
+                    _LOG.warning("Supervisor: get %s, status %s", url, res.status)
+    except TimeoutError:
+        msg = f"Supervisor: Timeout getting {url}"
+        _LOG.warning(msg)
+        if not log_only:
+            raise TimeoutError(msg) from None
+    except Exception as err:
+        msg = f"Supervisor: Error getting {url}, {err.__class__.__name__}: {err}"
+        _LOG.error(msg)
+        if not log_only:
+            raise
+    return None
