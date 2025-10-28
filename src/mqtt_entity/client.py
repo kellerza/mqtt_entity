@@ -267,7 +267,7 @@ class MQTTClient(MQTTAsyncClient):
             return
         _loop = asyncio.get_running_loop()
 
-        def _timeout() -> None:
+        async def _timeout() -> None:
             _LOG.warning(
                 "MQTT: Timeout waiting for Home Assistant. The %s topic is empty.\n"
                 "Configure the MQTT integration in Home Assistant to publish a "
@@ -277,7 +277,7 @@ class MQTTClient(MQTTAsyncClient):
             _LOG.warning(
                 "MQTT: Your entities will be unavailable if HA restarts",
             )
-            _loop.create_task(self.publish_discovery_info())  # noqa: RUF006
+            await self.publish_discovery_info()
 
         timeout = _loop.call_later(10, _timeout)
 

@@ -2,10 +2,11 @@
 
 import logging
 import os
-import typing as t
+from collections.abc import Callable
 from json import load, loads
 from json.decoder import JSONDecodeError
 from pathlib import Path
+from typing import Any, cast, get_origin
 
 import attrs
 from cattrs import Converter, transform_error
@@ -52,7 +53,7 @@ class AddonOptions:
             if not val:
                 continue
             name = att.name.lower()
-            if att.type is list or t.get_origin(att.type) is list:
+            if att.type is list or get_origin(att.type) is list:
                 try:
                     res[name] = loads(val)
                 except JSONDecodeError:
@@ -118,9 +119,16 @@ class MQTTOptions(AddonOptions):
     mqtt_username: str = ""
     mqtt_password: str = ""
 
+    mqtt_custom: bool = False
+    """Enable custom MQTT configuration. Ignore the supervisor."""
+
     async def init_addon(self) -> None:
         """Initialize MQTT options from environment variables and config files."""
         await super().init_addon()
+
+        if self.mqtt_custom:
+            _LOG.info("Custom MQTT configuration is enabled.")
+            return
 
         # Don't warn if MQTT password is set
         if not supervisor.token(warn=False):
@@ -132,7 +140,7 @@ class MQTTOptions(AddonOptions):
             return
 
         try:
-            data = t.cast(dict[str, t.Any], data["data"])
+            data = cast(dict[str, Any], data["data"])
             self.mqtt_host = data["host"]
             self.mqtt_port = data["port"]
             self.mqtt_username = data["username"]
@@ -144,11 +152,11 @@ class MQTTOptions(AddonOptions):
 CONVERTER = Converter(forbid_extra_keys=True)
 
 
-def structure_ensure_lowercase_keys(cls: type) -> t.Callable[[t.Any, t.Any], t.Any]:
+def structure_ensure_lowercase_keys(cls: type) -> Callable[[Any, Any], Any]:
     """Convert any uppercase keys to lowercase."""
     struct = make_dict_structure_fn(cls, CONVERTER)  # type: ignore[var-annotated]
 
-    def structure(d: dict[str, t.Any], cl: t.Any) -> t.Any:
+    def structure(d: dict[str, Any], cl: Any) -> Any:
         lower = [k for k in d if k.lower() != k]
         for k in lower:
             if k.lower() in d:

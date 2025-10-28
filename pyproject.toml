@@ -14,7 +14,8 @@ keywords = [
   "library",
   "mqtt",
 ]
-license = { file = "LICENSE" }
+license = "MIT"
+license-files = [ "LICENSE" ]
 authors = [ { name = "Johann Kellerman", email = "kellerza@gmail.com" } ]
 requires-python = ">=3.12"
 classifiers = [
@@ -30,10 +31,8 @@ dependencies = [
   "colorlog",
   "paho-mqtt>=2.1,<3",
 ]
-
-optional-dependencies.options = [
-  "pyyaml>=6,<7",
-]
+optional-dependencies.options = [ "pyyaml>=6,<7" ]
+urls.Homepage = "https://github.com/kellerza/mqtt_entity"
 
 [dependency-groups]
 dev = [
