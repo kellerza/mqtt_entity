@@ -11,7 +11,7 @@ from paho.mqtt.client import Client
 from paho.mqtt.enums import CallbackAPIVersion
 
 from mqtt_entity import MQTTClient, MQTTDevice, MQTTSelectEntity, MQTTSensorEntity
-from mqtt_entity.client import MQTTMatcher2
+from mqtt_entity.client import HA_STATUS_TOPIC, MQTTMatcher2
 from mqtt_entity.options import MQTTOptions
 
 _LOG = logging.getLogger(__name__)
@@ -184,3 +184,29 @@ def test_mqttmatcher() -> None:
 
     assert "/test/789" in m
     assert "test/789" not in m
+
+
+@pytest.mark.asyncio
+async def test_ha_status_topic(caplog: pytest.LogCaptureFixture) -> None:
+    """Test connect."""
+    with patch("mqtt_entity.client.Client") as paho_client_class:  # patch paho Client
+        # return a mock when you instantiate
+        cmock = paho_client_class.return_value = MagicMock(
+            spec=Client(callback_api_version=CallbackAPIVersion.VERSION2)
+        )
+        mqc = MQTTClient(availability_topic="test/status")
+
+        cmock.is_connected.return_value = True
+        mqc.connect_time = 1
+
+        assert HA_STATUS_TOPIC == "homeassistant/status"
+
+        assert HA_STATUS_TOPIC not in mqc._on_message_filtered
+        mqc.monitor_homeassistant_status()
+        assert HA_STATUS_TOPIC in mqc._on_message_filtered
+
+        assert "MQTT: Home Assistant online" not in caplog.text
+        await mqc._on_message_filtered[HA_STATUS_TOPIC]("online")
+        assert "MQTT: Home Assistant online" in caplog.text
+        await asyncio.sleep(0.1)
+        assert "Timeout waiting for Home Assistant" not in caplog.text

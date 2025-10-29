@@ -265,9 +265,12 @@ class MQTTClient(MQTTAsyncClient):
         """Monitor homeassistant/status & publish discovery info."""
         if HA_STATUS_TOPIC in self._on_message_filtered:
             return
-        _loop = asyncio.get_running_loop()
 
         async def _timeout() -> None:
+            try:
+                await asyncio.sleep(10)
+            except asyncio.CancelledError:
+                return
             _LOG.warning(
                 "MQTT: Timeout waiting for Home Assistant. The %s topic is empty.\n"
                 "Configure the MQTT integration in Home Assistant to publish a "
@@ -279,7 +282,7 @@ class MQTTClient(MQTTAsyncClient):
             )
             await self.publish_discovery_info()
 
-        timeout = _loop.call_later(10, _timeout)
+        timeout = asyncio.create_task(_timeout())
 
         async def _online_cb(payload_s: str) -> None:
             """Republish discovery info."""
