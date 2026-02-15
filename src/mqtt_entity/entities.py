@@ -4,27 +4,25 @@ from __future__ import annotations
 
 import warnings
 from collections.abc import Sequence
+from dataclasses import dataclass, field
 from json import dumps
 from typing import TYPE_CHECKING, Any
 
-import attrs
-from attrs import validators
-
 from .helpers import as_dict
-from .utils import BOOL_OFF, BOOL_ON, required, tostr
+from .utils import BOOL_OFF, BOOL_ON, tostr
 
 if TYPE_CHECKING:
     from .client import MQTTAsyncClient, TopicCallback
 
 
-@attrs.define()
+@dataclass
 class MQTTBaseEntity:
     """Base class for entities that support MQTT Discovery."""
 
     @property
     def topic_callbacks(self) -> dict[str, TopicCallback]:
         """Append topics and callbacks."""
-        return {}
+        return dict()
 
     @property
     def as_discovery_dict(self) -> dict[str, Any]:
@@ -32,7 +30,7 @@ class MQTTBaseEntity:
         return as_dict(self)
 
 
-@attrs.define()
+@dataclass
 class MQTTEntity(MQTTBaseEntity):
     """A generic Home Assistant entity used as the base class for other entities."""
 
@@ -41,7 +39,7 @@ class MQTTEntity(MQTTBaseEntity):
     """An ID that uniquely identifies this sensor. If two sensors have the same unique ID,
       Home Assistant will raise an exception. Required when used with device-based discovery."""
     state_topic: str
-    object_id: str = attrs.field(default="", metadata={"deprecated": True})
+    object_id: str = field(default="", metadata={"deprecated": True})
     """Used instead of name for automatic generation of entity_id."""
     default_entity_id: str = ""
     """Used instead of name/object_id for automatic generation of entity_id."""
@@ -65,10 +63,15 @@ class MQTTEntity(MQTTBaseEntity):
     unit_of_measurement: str = ""
     """Defines the units of measurement of the sensor, if any. The unit_of_measurement can be null."""
 
-    discovery_extra: dict[str, Any] = attrs.field(factory=dict)
+    discovery_extra: dict[str, Any] = field(default_factory=dict)
     """Additional MQTT Discovery attributes."""
 
     platform = ""
+
+    def __post_init__(self) -> None:
+        """Init the class."""
+        if not self.platform:
+            raise TypeError(f"Do not instantiate {self.__class__.__name__} directly")
 
     async def send_state(
         self, client: MQTTAsyncClient, payload: Any, *, retain: bool = False
@@ -87,11 +90,6 @@ class MQTTEntity(MQTTBaseEntity):
         await client.publish(
             topic=self.json_attributes_topic, payload=dumps(attributes), retain=retain
         )
-
-    def __attrs_post_init__(self) -> None:
-        """Init the class."""
-        if not self.platform:
-            raise TypeError(f"Do not instantiate {self.__class__.__name__} directly")
 
     @property
     def as_discovery_dict(self) -> dict[str, Any]:
@@ -120,7 +118,7 @@ class MQTTEntity(MQTTBaseEntity):
         return res
 
 
-@attrs.define()
+@dataclass
 class MQTTDeviceTrigger(MQTTBaseEntity):
     """A Home Assistant Device trigger.
 
@@ -141,7 +139,7 @@ class MQTTDeviceTrigger(MQTTBaseEntity):
         """Publish the state to the MQTT state topic."""
         await client.publish(self.topic, self.payload or "1")
 
-    discovery_extra: dict[str, Any] = attrs.field(factory=dict)
+    discovery_extra: dict[str, Any] = field(default_factory=dict)
     """Additional MQTT Discovery attributes."""
 
     @property
@@ -153,30 +151,33 @@ class MQTTDeviceTrigger(MQTTBaseEntity):
         return result
 
 
-@attrs.define()
+@dataclass
 class MQTTRWEntity(MQTTEntity):
     """Read/Write entity base class.
 
     This will default to a text entity.
     """
 
-    command_topic: str = attrs.field(
-        default="", validator=(validators.instance_of(str), validators.min_len(2))
-    )
+    command_topic: str = ""
     on_command: TopicCallback | None = None
 
     platform = "text"
 
+    def __post_init__(self) -> None:
+        """Post init."""
+        if not isinstance(self.command_topic, str) or len(self.command_topic) < 2:
+            raise ValueError("command_topic must be a string of at least 2 characters")
+
     @property
     def topic_callbacks(self) -> dict[str, TopicCallback]:
         """Return a dictionary of topic callbacks."""
-        result = super().topic_callbacks
+        result: dict[str, TopicCallback] = super().topic_callbacks
         if self.command_topic and self.on_command:
             result[self.command_topic] = self.on_command
         return result
 
 
-@attrs.define()
+@dataclass
 class MQTTSensorEntity(MQTTEntity):
     """A Home Assistant Sensor entity."""
 
@@ -189,7 +190,7 @@ class MQTTSensorEntity(MQTTEntity):
     platform = "sensor"
 
 
-@attrs.define()
+@dataclass
 class MQTTBinarySensorEntity(MQTTEntity):
     """A Home Assistant Binary Sensor entity."""
 
@@ -199,16 +200,21 @@ class MQTTBinarySensorEntity(MQTTEntity):
     platform = "binary_sensor"
 
 
-@attrs.define()
+@dataclass
 class MQTTSelectEntity(MQTTRWEntity):
     """A HomeAssistant Select entity."""
 
-    options: Sequence[str] = attrs.field(default=None, validator=required)
+    options: Sequence[str] = None  # type: ignore[assignment]
 
     platform = "select"
 
+    def __post_init__(self) -> None:
+        """Post init."""
+        if not self.options:
+            raise ValueError("options must be a non-empty sequence of strings")
 
-@attrs.define()
+
+@dataclass
 class MQTTSwitchEntity(MQTTRWEntity):
     """A Home Assistant Switch entity."""
 
@@ -218,14 +224,14 @@ class MQTTSwitchEntity(MQTTRWEntity):
     platform = "switch"
 
 
-@attrs.define()
+@dataclass
 class MQTTTextEntity(MQTTRWEntity):
     """A Home Assistant Switch entity."""
 
     platform = "text"
 
 
-@attrs.define()
+@dataclass
 class MQTTLightEntity(MQTTRWEntity):
     """A Home Assistant Switch entity."""
 
@@ -280,7 +286,7 @@ class MQTTLightEntity(MQTTRWEntity):
     @property
     def topic_callbacks(self) -> dict[str, TopicCallback]:
         """Return a dictionary of topic callbacks."""
-        result = super().topic_callbacks
+        result: dict[str, TopicCallback] = super().topic_callbacks
         if self.brightness_command_topic and self.on_brightness_change:
             result[self.brightness_command_topic] = self.on_brightness_change
         if self.effect_command_topic and self.on_effect_change:
@@ -290,7 +296,7 @@ class MQTTLightEntity(MQTTRWEntity):
         return result
 
 
-@attrs.define()
+@dataclass
 class MQTTNumberEntity(MQTTRWEntity):
     """A HomeAssistant Number entity."""
 

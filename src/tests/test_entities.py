@@ -11,6 +11,7 @@ from mqtt_entity import (
     MQTTNumberEntity,
     MQTTSensorEntity,
 )
+from mqtt_entity.client import MQTTAsyncClient
 from mqtt_entity.device import MQTTOrigin
 
 
@@ -159,8 +160,8 @@ async def test_set_attributes() -> None:
         state_topic="/st",
         name="test1",
     )
-    mc = AsyncMock()
+    mc = AsyncMock(spec=MQTTAsyncClient)
     thea = {"the": "attr"}
-    await e.send_json_attributes(mc, thea)
+    await e.send_json_attributes(mc, thea)  # type: ignore[arg-type]
     assert mc.publish.call_count == 1
     assert mc.publish.call_args[1]["topic"] == "blah"

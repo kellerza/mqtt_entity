@@ -3,12 +3,12 @@
 import logging
 import os
 from collections.abc import Callable
+from dataclasses import Field, dataclass, fields, is_dataclass
 from json import load, loads
 from json.decoder import JSONDecodeError
 from pathlib import Path
 from typing import Any, cast, get_origin
 
-import attrs
 from cattrs import Converter, transform_error
 from cattrs.gen import make_dict_structure_fn
 
@@ -24,7 +24,7 @@ except ImportError:
 _LOG = logging.getLogger(__name__)
 
 
-@attrs.define()
+@dataclass
 class AddonOptions:
     """HASS Addon Options."""
 
@@ -45,9 +45,7 @@ class AddonOptions:
     def load_env(self) -> bool:
         """Get attrs fields from the environment."""
         res = {}
-        atts: tuple[attrs.Attribute, ...] = attrs.fields(
-            attrs.resolve_types(self.__class__)
-        )
+        atts: tuple[Field, ...] = fields(self)
         for att in atts:
             val = os.getenv(att.name.upper())
             if not val:
@@ -95,7 +93,7 @@ class AddonOptions:
                 continue
             with fpath.open("r", encoding="utf-8") as fptr:
                 try:
-                    opt = load(fptr) if is_json else {}
+                    opt: dict[str, Any] = load(fptr) if is_json else {}
                     if is_yml and safe_load is not None:
                         opt = safe_load(fptr)
                 except Exception as err:
@@ -110,7 +108,7 @@ class AddonOptions:
 MQFAIL = "MQTT: Failed to get MQTT service details from the Supervisor"
 
 
-@attrs.define()
+@dataclass
 class MQTTOptions(AddonOptions):
     """MQTT Options for HASS Addon."""
 
@@ -167,4 +165,4 @@ def structure_ensure_lowercase_keys(cls: type) -> Callable[[Any, Any], Any]:
     return structure
 
 
-CONVERTER.register_structure_hook_factory(attrs.has, structure_ensure_lowercase_keys)
+CONVERTER.register_structure_hook_factory(is_dataclass, structure_ensure_lowercase_keys)

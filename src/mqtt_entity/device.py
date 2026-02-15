@@ -1,15 +1,13 @@
 """HASS MQTT Device, used for device based discovery."""
 
+from dataclasses import dataclass, field
 from typing import Any
-
-import attrs
-from attrs import validators
 
 from .entities import MQTTBaseEntity
 from .helpers import DEVREG_ABBREVIATE, ORIGIN_ABBREVIATE, as_dict, hass_abbreviate
 
 
-@attrs.define()
+@dataclass
 class MQTTOrigin:
     """Represent the origin of an MQTT message."""
 
@@ -24,33 +22,36 @@ M_SHARED = {"shared": True}
 M_DEV = {"dev": True}
 
 
-@attrs.define()
+@dataclass
 class MQTTDevice:
     """Base class for MQTT Device Discovery. A Home Assistant Device groups entities."""
 
-    identifiers: list[str | tuple[str, Any]] = attrs.field(
-        validator=[validators.instance_of(list), validators.min_len(1)], metadata=M_DEV
-    )
+    identifiers: list[str | tuple[str, Any]] = field(metadata=M_DEV)
 
     components: dict[str, MQTTBaseEntity]
     """MQTT component entities."""
-    remove_components: dict[str, str] = attrs.field(factory=dict)
+    remove_components: dict[str, str] = field(default_factory=dict)
     """Components to be removed on discovery. object_id and the platform name."""
 
     # device options
-    connections: list[str] = attrs.field(factory=list, metadata=M_DEV)
-    configuration_url: str = attrs.field(default="", metadata=M_DEV)
-    manufacturer: str = attrs.field(default="", metadata=M_DEV)
-    model: str = attrs.field(default="", metadata=M_DEV)
-    name: str = attrs.field(default="", metadata=M_DEV)
-    suggested_area: str = attrs.field(default="", metadata=M_DEV)
-    sw_version: str = attrs.field(default="", metadata=M_DEV)
-    via_device: str = attrs.field(default="", metadata=M_DEV)
+    connections: list[str] = field(default_factory=list, metadata=M_DEV)
+    configuration_url: str = field(default="", metadata=M_DEV)
+    manufacturer: str = field(default="", metadata=M_DEV)
+    model: str = field(default="", metadata=M_DEV)
+    name: str = field(default="", metadata=M_DEV)
+    suggested_area: str = field(default="", metadata=M_DEV)
+    sw_version: str = field(default="", metadata=M_DEV)
+    via_device: str = field(default="", metadata=M_DEV)
 
     # shared options
-    state_topic: str = attrs.field(default="", metadata=M_SHARED)
-    command_topic: str = attrs.field(default="", metadata=M_SHARED)
-    qos: str = attrs.field(default="", metadata=M_SHARED)
+    state_topic: str = field(default="", metadata=M_SHARED)
+    command_topic: str = field(default="", metadata=M_SHARED)
+    qos: str = field(default="", metadata=M_SHARED)
+
+    def __post_init__(self) -> None:
+        """Post init."""
+        if not self.identifiers:
+            raise ValueError("MQTTDevice must have at least one identifier.")
 
     @property
     def id(self) -> str:

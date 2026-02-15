@@ -1,6 +1,6 @@
 [build-system]
 build-backend = "uv_build"
-requires = [ "uv-build>=0.9,<0.10" ]
+requires = [ "uv-build>=0.10,<0.11" ]
 
 [project]
 name = "mqtt-entity"
@@ -26,7 +26,6 @@ classifiers = [
 ]
 dependencies = [
   "aiohttp>3.12,<4",
-  "attrs>=25,<26",
   "cattrs>=25,<26",
   "colorlog",
   "paho-mqtt>=2.1,<3",
@@ -37,7 +36,6 @@ urls.Homepage = "https://github.com/kellerza/mqtt_entity"
 [dependency-groups]
 dev = [
   "codespell",
-  "mypy",
   "pyproject-fmt",
   "pytest",
   "pytest-asyncio",
@@ -45,10 +43,11 @@ dev = [
   "pytest-env",
   "pytest-github-actions-annotate-failures",
   "types-pyyaml",
+  "zuban>=0.5.1",
 ]
 
-[tool.uv.build-backend]
-source-exclude = [ ".mypy_cache", "src/tests" ]
+[tool.uv]
+build-backend.source-exclude = [ ".mypy_cache", "src/tests" ]
 
 [tool.ruff]
 target-version = "py312"
@@ -81,32 +80,21 @@ lint.pylint.max-args = 7
 [tool.codespell]
 ignore-words-list = "hass"
 
-[tool.pytest.ini_options]
-pythonpath = [ ".", "src" ]
-testpaths = "src/tests"
-filterwarnings = "ignore:.+@coroutine.+deprecated.+"
-norecursedirs = [ ".git", "modules" ]
-log_cli = true
-log_cli_level = "DEBUG"
-asyncio_mode = "auto"
-addopts = "--cov=src --cov-report xml:cov.xml"
-asyncio_default_fixture_loop_scope = "function"
-env = [
+[tool.pytest]
+ini_options.pythonpath = [ ".", "src" ]
+ini_options.testpaths = "src/tests"
+ini_options.filterwarnings = "ignore:.+@coroutine.+deprecated.+"
+ini_options.norecursedirs = [ ".git", "modules" ]
+ini_options.log_cli = true
+ini_options.log_cli_level = "DEBUG"
+ini_options.asyncio_mode = "auto"
+ini_options.addopts = "--cov=src --cov-report xml:cov.xml"
+ini_options.asyncio_default_fixture_loop_scope = "function"
+ini_options.env = [
   "MQTT_HOST=192.168.1.8",
   "MQTT_PASSWORD=hass123",
   "MQTT_USERNAME=hass",
 ]
-
-[tool.mypy]
-disallow_untyped_defs = true
-ignore_missing_imports = true
-warn_unused_configs = true
-exclude = [ "build" ]
-enable_error_code = [ "ignore-without-code" ]
-
-[[tool.mypy.overrides]]
-module = "tests.*"
-disallow_untyped_defs = true
 
 [tool.semantic_release]
 commit = true
@@ -117,11 +105,7 @@ commit_parser = "emoji"
 version_toml = [ "pyproject.toml:project.version" ]
 build_command = "pip install uv && uv build"
 commit_version_number = true
-
-[tool.semantic_release.branches.main]
-match = "main"
-
-[tool.semantic_release.commit_parser_options]
-major_tags = [ ":boom:" ]
-minor_tags = [ ":rocket:" ]
-patch_tags = [ "" ]
+branches.main.match = "main"
+commit_parser_options.major_tags = [ ":boom:" ]
+commit_parser_options.minor_tags = [ ":rocket:" ]
+commit_parser_options.patch_tags = [ "" ]

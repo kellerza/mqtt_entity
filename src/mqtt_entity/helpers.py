@@ -1,5 +1,6 @@
 """Helpers."""
 
+import dataclasses
 import inspect
 import logging
 import os
@@ -7,19 +8,23 @@ from collections.abc import Iterable
 from pathlib import Path
 from typing import Any, NotRequired, TypedDict
 
-import attrs
-
 _LOG = logging.getLogger(__name__)
 
 
+# class DataclassInstance(Protocol):
+#     """Dataclass class."""
+
+#     __dataclass_fields__: dict
+
+
 def as_dict(
-    obj: attrs.AttrsInstance,
+    obj: Any,
     exclude: Iterable[str] | None = None,
     metadata_key: str = "",
 ) -> dict[str, Any]:
     """Represent the object as a dictionary, without empty values and defaults."""
 
-    def _filter(atrb: attrs.Attribute, value: Any) -> bool:
+    def _filter(atrb: dataclasses.Field, value: Any) -> bool:
         if not value or atrb.default == value:
             return False
         if exclude and atrb.name in exclude:
@@ -30,10 +35,13 @@ def as_dict(
             return False
         return not inspect.isfunction(value)
 
-    res = attrs.asdict(obj, filter=_filter)
+    res = {
+        k: v
+        for k, v in dataclasses.asdict(obj).items()  # typing: ignore[call-overload]
+        if _filter(obj.__dataclass_fields__[k], v)
+    }
 
-    extra = getattr(obj, "discovery_extra", None)
-    if extra:
+    if extra := getattr(obj, "discovery_extra", None):
         keys = {k: extra[k] for k in extra if k in res and res[k] != extra[k]}
         _LOG.debug("Overwriting %s", keys)
         res.update(extra)

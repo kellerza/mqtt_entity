@@ -52,12 +52,12 @@ async def test_mqtt_server() -> None:
     loop = asyncio.get_running_loop()
     tasks = list[asyncio.Task]()
 
-    async def select_select(msg: str) -> None:
+    async def select_select(msg: str, _: str) -> None:
         _LOG.error("onchange start: %s", msg)
         await sense_ent.send_state(mqc, f"select 1={msg} --> 2")
         await select_ent2.send_state(mqc, msg)
 
-    def select_select2(msg: str) -> None:
+    def select_select2(msg: str, _: str) -> None:
         _LOG.error("onchange no async: %s", msg)
         nonlocal tasks
         tasks = [
@@ -206,7 +206,7 @@ async def test_ha_status_topic(caplog: pytest.LogCaptureFixture) -> None:
         assert HA_STATUS_TOPIC in mqc._on_message_filtered
 
         assert "MQTT: Home Assistant online" not in caplog.text
-        await mqc._on_message_filtered[HA_STATUS_TOPIC]("online")
+        await mqc._on_message_filtered[HA_STATUS_TOPIC]("online", "")
         assert "MQTT: Home Assistant online" in caplog.text
         await asyncio.sleep(0.1)
         assert "Timeout waiting for Home Assistant" not in caplog.text

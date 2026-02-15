@@ -8,10 +8,10 @@ import inspect
 import logging
 import time
 from collections.abc import Callable, Coroutine, Generator
+from dataclasses import dataclass, field
 from json import dumps
-from typing import Any
+from typing import Any, cast
 
-import attrs
 from paho.mqtt.client import Client, MQTTMessage
 from paho.mqtt.enums import CallbackAPIVersion
 from paho.mqtt.matcher import MQTTMatcher
@@ -24,29 +24,28 @@ HA_STATUS_TOPIC = "homeassistant/status"
 _LOG = logging.getLogger(__name__)
 MQTT_EXPLORER_LIMIT = 20000
 
-type SyncTopicCallback = Callable[[str], None] | Callable[[str, str], None]
-type AsyncTopicCallback = (
-    Callable[[str], Coroutine[Any, Any, None]]
-    | Callable[[str, str], Coroutine[Any, Any, None]]
-)
-type TopicCallback = SyncTopicCallback | AsyncTopicCallback
+type SyncCallback = Callable[[str, str], None]
+type AsyncCallback = Callable[[str, str], Coroutine[Any, Any, None]]
+
+type TopicCallback = SyncCallback | AsyncCallback
 
 
-@attrs.define()
+@dataclass()
 class MQTTAsyncClient:
     """Async MQTT Client."""
 
     availability_topic: str = ""
-    client: Client = attrs.field(init=False, repr=False)
+    client: Client = field(init=False, repr=False)
     suppress_exceptions: bool = True
-    connect_time: float = attrs.field(init=False, repr=False)
+    connect_time: float = field(init=False, repr=False)
 
-    _on_message_filtered: MQTTMatcher2 = attrs.field(
-        factory=lambda: MQTTMatcher2(), repr=False
+    _on_message_filtered: MQTTMatcher2 = field(
+        default_factory=lambda: MQTTMatcher2(),  # noqa: PLW0108
+        repr=False,
     )
-    _loop: asyncio.AbstractEventLoop = attrs.field(init=False, repr=False)
+    _loop: asyncio.AbstractEventLoop = field(init=False, repr=False)
 
-    def __attrs_post_init__(self) -> None:
+    def __post_init__(self) -> None:
         """Init."""
         self.connect_time = 0
         self.client = Client(callback_api_version=CallbackAPIVersion.VERSION2)
@@ -133,7 +132,7 @@ class MQTTAsyncClient:
             """Do not disconnect, allow the broker to publish LWT message."""
             self.client.loop_stop()
 
-        await asyncio.get_running_loop().run_in_executor(None, _stop)
+        await asyncio.to_thread(_stop)
 
     def publish_args(
         self, topic: str, payload: str | None, qos: int, retain: bool
@@ -142,7 +141,7 @@ class MQTTAsyncClient:
         if not topic:
             raise ValueError(f"MQTT: Cannot publish to empty topic (payload={payload})")
         if not isinstance(qos, int):
-            qos = 0
+            qos = 0  # type: ignore[unreachable]
         if retain:
             qos = 1
         _LOG.debug(
@@ -166,9 +165,7 @@ class MQTTAsyncClient:
         """Publish a MQTT message."""
         args = self.publish_args(topic, payload, qos, retain)
         await self.wait_connected()
-        await asyncio.get_running_loop().run_in_executor(
-            None, self.client.publish, *args
-        )
+        await asyncio.to_thread(self.client.publish, *args)
 
     def topic_unsubscribe(self, topic: str) -> None:
         """Remove a topic from the topic callbacks."""
@@ -185,20 +182,21 @@ class MQTTAsyncClient:
         """MQTT on_message fallback."""
         topic = message.topic
         payload = message.payload.decode("utf-8")
-        if topic is None:
+        if not topic:
             _LOG.warning("MQTT: received empty topic, payload: %s", payload)
             return
 
         # split sync & async callbacks
-        sync_cbs: list[tuple[SyncTopicCallback, list[str]]] = []
-        async_cbs: list[tuple[AsyncTopicCallback, list[str]]] = []
+        sync_cbs = list[tuple[SyncCallback, tuple[str, ...]]]()
+        async_cbs = list[tuple[AsyncCallback, tuple[str, ...]]]()
         for cb in self._on_message_filtered.iter_match(topic):
-            paramc = len(inspect.signature(cb).parameters)
-            args = [payload] if paramc == 1 else [payload, message.topic]
+            cnt = len(inspect.signature(cb).parameters)
+            args: tuple[str, ...] = (payload,) if cnt == 1 else (payload, message.topic)
             if inspect.iscoroutinefunction(cb):
                 async_cbs.append((cb, args))
+                continue
             else:
-                sync_cbs.append((cb, args))  # type:ignore[arg-type]
+                sync_cbs.append((cast(SyncCallback, cb), args))
 
         if not sync_cbs and not async_cbs:
             _LOG.warning(
@@ -247,18 +245,18 @@ class MQTTAsyncClient:
         self._loop.call_soon_threadsafe(lambda: self._loop.create_task(cbs()))
 
 
-@attrs.define()
+@dataclass()
 class MQTTClient(MQTTAsyncClient):
     """Home Assistant specific MQTT client."""
 
-    devs: list[MQTTDevice] = attrs.field(factory=list)
+    devs: list[MQTTDevice] = field(default_factory=list)
 
     origin_name: str = "mqtt-entity"
-    origin_version: str = attrs.field(
-        factory=lambda: importlib.metadata.version("mqtt-entity")
+    origin_version: str = field(
+        default_factory=lambda: importlib.metadata.version("mqtt-entity")
     )
     origin_url: str = ""
-    clean_entities: int = attrs.field(default=1)
+    clean_entities: int = 1
     """Clean entities on discovery: 1=migrate, 2=remove, 0=none."""
 
     def monitor_homeassistant_status(self) -> None:
@@ -284,7 +282,7 @@ class MQTTClient(MQTTAsyncClient):
 
         timeout = asyncio.create_task(_timeout())
 
-        async def _online_cb(payload_s: str) -> None:
+        async def _online_cb(payload_s: str, _: str) -> None:
             """Republish discovery info."""
             if payload_s != "online":
                 _LOG.warning(
@@ -328,6 +326,7 @@ class MQTTClient(MQTTAsyncClient):
 
             # add topic callbacks
             tcb: dict[str, TopicCallback] = {}
+            tcb = dict[str, TopicCallback]()
             for ent in ddev.components.values():
                 tcb.update(ent.topic_callbacks)
             for topic, cbk in tcb.items():
@@ -386,7 +385,7 @@ class MQTTClient(MQTTAsyncClient):
 class MQTTMatcher2(MQTTMatcher):
     """Extend MQTTMatcher to return all keys."""
 
-    def keys(self) -> Generator[str, None, None]:
+    def keys(self) -> Generator[str]:
         """Return all keys."""
 
         def iterall(
@@ -414,3 +413,7 @@ class MQTTMatcher2(MQTTMatcher):
             del self[topic]
         except KeyError:  # no such subscription
             pass
+
+    def iter_match(self, topic: str) -> Generator[TopicCallback]:
+        """Return an iterator on all values associated with filters that match the :topic."""
+        yield from super().iter_match(topic)

@@ -4,10 +4,7 @@ import logging
 from json import loads
 from json.decoder import JSONDecodeError
 from math import modf
-from typing import TYPE_CHECKING, Any
-
-if TYPE_CHECKING:
-    import attrs
+from typing import Any
 
 BOOL_ON = "ON"
 BOOL_OFF = "OFF"
@@ -52,10 +49,10 @@ def logging_color(*, debug: bool = False, force: bool = True) -> None:
         )
 
 
-def required(_obj: Any, attr_obj: "attrs.Attribute[Any]", val: Any) -> None:
-    """Ensure an attrs.field is present."""
-    if val is None:
-        raise TypeError(f"Argument '{getattr(attr_obj, 'name', '')}' missing")
+# def required(_obj: Any, attr_obj: "attrs.Attribute[Any]", val: Any) -> None:
+#     """Ensure an attrs.field is present."""
+#     if val is None:
+#         raise TypeError(f"Argument '{getattr(attr_obj, 'name', '')}' missing")
 
 
 def slug(name: str) -> str:

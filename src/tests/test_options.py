@@ -1,9 +1,9 @@
 """Options."""
 
 import os
+from dataclasses import dataclass, field
 from unittest import mock
 
-import attrs
 import pytest
 
 from mqtt_entity.options import MQTTOptions
@@ -48,9 +48,9 @@ def test_load_env_bad() -> None:
             OPT.load_env()
 
 
-@attrs.define()
+@dataclass
 class LoadEnvClass(MQTTOptions):
     """Test class."""
 
-    lst: list = attrs.field(factory=list)
+    lst: list = field(default_factory=list)
     num: int = 0

@@ -1,8 +1,6 @@
 """Test utils."""
 
-import pytest
-
-from mqtt_entity.utils import load_json, required, slug, tostr
+from mqtt_entity.utils import load_json, slug, tostr
 
 
 def test_load_dict() -> None:
@@ -13,10 +11,10 @@ def test_load_dict() -> None:
     assert '{"a":"1}' == load_json('{"a":"1}')
 
 
-def test_required() -> None:
-    """Test required."""
-    with pytest.raises(TypeError):
-        required(None, None, None)  # type:ignore[arg-type]
+# def test_required() -> None:
+#     """Test required."""
+#     with pytest.raises(TypeError):
+#         required(None, None, None)  # type:ignore[arg-type]
 
 
 def test_slug() -> None:
