@@ -37,7 +37,7 @@ def as_dict(
 
     res = {
         k: v
-        for k, v in dataclasses.asdict(obj).items()  # typing: ignore[call-overload]
+        for k, v in dataclasses.asdict(obj).items()
         if _filter(obj.__dataclass_fields__[k], v)
     }
 

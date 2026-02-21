@@ -1,6 +1,6 @@
 """mqtt-entity library."""
 
-from mqtt_entity.client import MQTTClient
+from mqtt_entity.client import MQTTClient, TopicCallback
 from mqtt_entity.device import MQTTDevice
 from mqtt_entity.entities import (
     MQTTBaseEntity,
@@ -30,4 +30,5 @@ __all__ = [
     "MQTTSensorEntity",
     "MQTTSwitchEntity",
     "MQTTTextEntity",
+    "TopicCallback",
 ]
