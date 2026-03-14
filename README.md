@@ -15,13 +15,13 @@ Features:
 - MQTTDevice class to manage devices
   - Availability management
   - Manage entities per device
-- Home Assistant Entities modelled as attrs classes:
+- Home Assistant Entities modelled as dataclasses:
   - Read-only: Sensor, BinarySensor
   - Read & write: Select, Switch, Number, Text, Light
   - MQTT device events
 - Asyncio based
 - Helpers for Home Assistant add-ons (optional)
-  - Add-on configuration modeled as attrs classes
+  - Add-on configuration modeled as dataclasses
     - Load from environment variables, HA's options.yaml or options.json
     - Load MQTT connection settings from the Supervisor
   - Enable add-on logging (incl colors & debug by config)
@@ -30,7 +30,7 @@ Features:
 
 This MQTT code was included in several of my home Assistant addons (SMA-EM / Sunsynk). It is easier to update a single library & add new features, like discovery removal.
 
-Alternatives options (not based on asyncio)
+Alternative options (not based on asyncio)
 
 - <https://pypi.org/project/ha-mqtt-discoverable/>
 - <https://pypi.org/project/homeassistant-mqtt-binding/>
@@ -49,8 +49,7 @@ To create a new release, include a commit with a :dolphin: emoji as a prefix in 
 # Patch
 git commit -m ":dolphin: Release 0.0.x"
 
-# Minor
-git commit -m ":rocket: Release 0.x.0"
+# Minor - any commit
 ```
 
 ### Development

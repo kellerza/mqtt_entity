@@ -141,7 +141,7 @@ class MQTTAsyncClient:
         if not topic:
             raise ValueError(f"MQTT: Cannot publish to empty topic (payload={payload})")
         if not isinstance(qos, int):
-            qos = 0  # type: ignore[unreachable]
+            qos = 0
         if retain:
             qos = 1
         _LOG.debug(

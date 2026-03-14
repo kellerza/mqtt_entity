@@ -1,10 +1,10 @@
 repos:
   - repo: local
     hooks:
-      - id: uv lock
-        name: uv lock
+      - id: uv
+        name: uv sync & upgrade
         language: system
-        entry: uv lock
+        entry: uv sync --upgrade --all-extras
         pass_filenames: false
 
       - id: pyproject-fmt
@@ -33,7 +33,7 @@ repos:
 
       - id: zuban
         name: zuban
-        entry: uv run zuban check
+        entry: uv run zuban check src
         language: system
         types: [python]
         pass_filenames: false

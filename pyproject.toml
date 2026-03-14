@@ -109,3 +109,7 @@ branches.main.match = "main"
 commit_parser_options.major_tags = [ ":boom:" ]
 commit_parser_options.minor_tags = [ ":rocket:" ]
 commit_parser_options.patch_tags = [ "" ]
+
+[tool.zuban]
+warn_unreachable = false
+warn_unused_ignores = true  # Not yet supported in 0.6.0
