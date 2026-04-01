@@ -162,6 +162,6 @@ async def test_set_attributes() -> None:
     )
     mc = AsyncMock(spec=MQTTAsyncClient)
     thea = {"the": "attr"}
-    await e.send_json_attributes(mc, thea)  # type: ignore[arg-type]
+    await e.send_json_attributes(mc, thea)
     assert mc.publish.call_count == 1
     assert mc.publish.call_args[1]["topic"] == "blah"

@@ -47,7 +47,7 @@ dev = [
 ]
 
 [tool.uv]
-build-backend.source-exclude = [ ".mypy_cache", "src/tests" ]
+build-backend.source-exclude = [ "src/tests" ]
 
 [tool.ruff]
 target-version = "py312"
