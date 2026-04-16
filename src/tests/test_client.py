@@ -226,7 +226,6 @@ async def test_reconnect_after_broker_restart(caplog: pytest.LogCaptureFixture) 
         assert "Connection lost. Waiting for reconnect" in caplog.text
 
 
-
 def test_on_connect_snapshots_keys_for_resubscribe() -> None:
     """Test that _mqtt_on_connect is safe against concurrent topic changes.
 
