@@ -264,7 +264,6 @@ def test_on_connect_snapshots_keys_for_resubscribe() -> None:
         mqc._on_message_filtered["topic/b"] = lambda p: None
 
         subscribed: list[str] = []
-        original_subscribe = cmock.subscribe
 
         def track_and_mutate(topic: str) -> None:
             """Track subscribes and mutate the tree mid-iteration."""
