@@ -187,6 +187,103 @@ def test_mqttmatcher() -> None:
 
 
 @pytest.mark.asyncio
+async def test_reconnect_after_broker_restart(caplog: pytest.LogCaptureFixture) -> None:
+    """Test that wait_connected() survives a broker restart.
+
+    Simulates: initial connect succeeds, broker goes down (connect_time
+    deadline expires), then paho auto-reconnect restores the connection.
+    wait_connected() should grant a fresh window and succeed.
+    """
+    with patch("mqtt_entity.client.Client") as paho_client_class:
+        cmock = paho_client_class.return_value = MagicMock(
+            spec=Client(callback_api_version=CallbackAPIVersion.VERSION2)
+        )
+        mqc = MQTTClient(availability_topic="test/status")
+
+        # Phase 1: initial connect succeeds immediately
+        cmock.is_connected.return_value = True
+        await mqc.connect(username="u", password="p", host="localhost")
+        mqc._mqtt_on_connect(cmock, None, None, 0)  # type: ignore[arg-type]
+        await mqc.wait_connected()  # should pass
+
+        # Phase 2: broker goes down — simulate stale connect_time
+        cmock.is_connected.return_value = False
+        mqc.connect_time = time.time() - 100  # deadline long expired
+
+        # Phase 3: paho auto-reconnect will restore in 0.3s
+        reconnect_at = time.time() + 0.3
+
+        def delayed_reconnect() -> bool:
+            if time.time() >= reconnect_at:
+                return True
+            return False
+
+        cmock.is_connected.side_effect = delayed_reconnect
+
+        # wait_connected() should detect stale deadline, grant fresh window,
+        # and wait for auto-reconnect instead of failing immediately
+        await mqc.wait_connected()
+        assert "Connection lost. Waiting for reconnect" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_on_connect_resets_connect_time() -> None:
+    """Test that _mqtt_on_connect resets connect_time on reconnect."""
+    with patch("mqtt_entity.client.Client") as paho_client_class:
+        cmock = paho_client_class.return_value = MagicMock(
+            spec=Client(callback_api_version=CallbackAPIVersion.VERSION2)
+        )
+        mqc = MQTTClient(availability_topic="test/status")
+
+        # Simulate expired connect_time (as after hours of uptime)
+        mqc.connect_time = time.time() - 3600
+
+        mqc._mqtt_on_connect(cmock, None, None, 0)  # type: ignore[arg-type]
+
+        # connect_time should be refreshed to ~now + 5
+        assert mqc.connect_time > time.time()
+        assert mqc.connect_time <= time.time() + 6
+
+
+def test_on_connect_snapshots_keys_for_resubscribe() -> None:
+    """Test that _mqtt_on_connect is safe against concurrent topic changes.
+
+    The keys() generator traverses MQTTMatcher2's internal tree. If
+    topic_subscribe()/topic_unsubscribe() runs concurrently (from the
+    asyncio thread), mutating the tree mid-iteration would crash with
+    RuntimeError. Using list() to snapshot prevents this.
+    """
+    with patch("mqtt_entity.client.Client") as paho_client_class:
+        cmock = paho_client_class.return_value = MagicMock(
+            spec=Client(callback_api_version=CallbackAPIVersion.VERSION2)
+        )
+        mqc = MQTTClient()
+
+        # Pre-populate subscriptions
+        mqc._on_message_filtered["topic/a"] = lambda p: None
+        mqc._on_message_filtered["topic/b"] = lambda p: None
+
+        subscribed: list[str] = []
+        original_subscribe = cmock.subscribe
+
+        def track_and_mutate(topic: str) -> None:
+            """Track subscribes and mutate the tree mid-iteration."""
+            subscribed.append(topic)
+            # Simulate concurrent topic_subscribe from asyncio thread —
+            # this would crash a bare keys() generator
+            if topic == "topic/a":
+                mqc._on_message_filtered["topic/c"] = lambda p: None
+
+        cmock.subscribe.side_effect = track_and_mutate
+
+        # Should NOT raise RuntimeError: dictionary changed size during iteration
+        mqc._mqtt_on_connect(cmock, None, None, 0)  # type: ignore[arg-type]
+
+        assert "topic/a" in subscribed
+        assert "topic/b" in subscribed
+
+
+@pytest.mark.asyncio
 async def test_ha_status_topic(caplog: pytest.LogCaptureFixture) -> None:
     """Test connect."""
     with patch("mqtt_entity.client.Client") as paho_client_class:  # patch paho Client
