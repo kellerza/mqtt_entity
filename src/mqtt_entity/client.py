@@ -103,8 +103,11 @@ class MQTTAsyncClient:
         # publish online (Last will sets offline on disconnect)
         if self.availability_topic:
             client.publish(self.availability_topic, "online", retain=True)
-        # Subscribe to all existing change handlers (on connect/reconnect)
-        for topic in self._on_message_filtered.keys():
+        # Subscribe to all existing change handlers (on connect/reconnect).
+        # Snapshot keys to avoid RuntimeError from concurrent modification —
+        # this callback runs in paho's thread while the asyncio loop may call
+        # topic_subscribe()/topic_unsubscribe() concurrently.
+        for topic in list(self._on_message_filtered.keys()):
             client.subscribe(topic)
 
     async def wait_connected(self) -> None:
@@ -113,6 +116,12 @@ class MQTTAsyncClient:
             return
         if self.connect_time == 0:
             raise RuntimeError("MQTT: Call connect first")
+        # If the original deadline has already passed, paho's auto-reconnect
+        # may be in progress. Give it a fresh window instead of failing
+        # immediately with a stale deadline from the initial connect().
+        if self.connect_time > 0 and time.time() > self.connect_time:
+            _LOG.warning("MQTT: Connection lost. Waiting for reconnect...")
+            self.connect_time = time.time() + 30
         _LOG.debug("MQTT: Waiting for connection...")
         while True:
             if self.client.is_connected():
@@ -121,7 +130,7 @@ class MQTTAsyncClient:
             if time.time() > self.connect_time:
                 if self.connect_time < 0:
                     raise ConnectionError("MQTT: Connection failed")
-                msg = "MQTT: Connection timeout (5s)"
+                msg = "MQTT: Connection timeout (30s)"
                 _LOG.error(msg)
                 raise ConnectionError(msg)
 
