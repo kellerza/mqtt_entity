@@ -100,9 +100,6 @@ class MQTTAsyncClient:
             self.connect_time = -1  # failed
             return
         _LOG.info("MQTT: Connected")
-        # Reset connect_time so wait_connected() accepts this connection,
-        # including after paho's automatic reconnect.
-        self.connect_time = time.time() + 5
         # publish online (Last will sets offline on disconnect)
         if self.availability_topic:
             client.publish(self.availability_topic, "online", retain=True)
