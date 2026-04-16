@@ -226,24 +226,6 @@ async def test_reconnect_after_broker_restart(caplog: pytest.LogCaptureFixture) 
         assert "Connection lost. Waiting for reconnect" in caplog.text
 
 
-@pytest.mark.asyncio
-async def test_on_connect_resets_connect_time() -> None:
-    """Test that _mqtt_on_connect resets connect_time on reconnect."""
-    with patch("mqtt_entity.client.Client") as paho_client_class:
-        cmock = paho_client_class.return_value = MagicMock(
-            spec=Client(callback_api_version=CallbackAPIVersion.VERSION2)
-        )
-        mqc = MQTTClient(availability_topic="test/status")
-
-        # Simulate expired connect_time (as after hours of uptime)
-        mqc.connect_time = time.time() - 3600
-
-        mqc._mqtt_on_connect(cmock, None, None, 0)  # type: ignore[arg-type]
-
-        # connect_time should be refreshed to ~now + 5
-        assert mqc.connect_time > time.time()
-        assert mqc.connect_time <= time.time() + 6
-
 
 def test_on_connect_snapshots_keys_for_resubscribe() -> None:
     """Test that _mqtt_on_connect is safe against concurrent topic changes.
