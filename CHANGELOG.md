@@ -3,10 +3,12 @@
 ## Unreleased
 
 - Per-device `MQTTDevice.availability_topics` / `availability_mode` for discovery;
+- `MQTTDevice`: device registry fields `hw_version`, `model_id`, `serial_number`; `connections` typed as `list[tuple[str, str]]`; `qos` as `int | None`.
+  Multi-topic discovery omits `avty_mode` by default (Home Assistant default `latest`); set `availability_mode` to `"all"` or `"any"` to emit `avty_mode`.
 
 ## v0.1.1 (2025-06-21)
 
-### :dolphin:
+### :dolphin
 
 - :dolphin: build
   ([`fa0a3a2`](https://github.com/kellerza/mqtt_entity/commit/fa0a3a2b18b7b22125dd9afb65dd86089f22ab61))
@@ -16,7 +18,7 @@
 
 ## v0.1.0 (2025-06-20)
 
-### :rocket:
+### :rocket
 
 - :rocket: event
   ([`fc21103`](https://github.com/kellerza/mqtt_entity/commit/fc211037b50eef355956b145e6d1b8dcbb35c1f1))

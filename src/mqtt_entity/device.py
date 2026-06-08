@@ -46,10 +46,13 @@ class MQTTDevice:
     """Components to be removed on discovery. object_id and the platform name."""
 
     # device options
-    connections: list[str] = field(default_factory=list, metadata=M_DEV)
+    connections: list[tuple[str, str]] = field(default_factory=list, metadata=M_DEV)
     configuration_url: str = field(default="", metadata=M_DEV)
     manufacturer: str = field(default="", metadata=M_DEV)
     model: str = field(default="", metadata=M_DEV)
+    model_id: str = field(default="", metadata=M_DEV)
+    hw_version: str = field(default="", metadata=M_DEV)
+    serial_number: str = field(default="", metadata=M_DEV)
     name: str = field(default="", metadata=M_DEV)
     suggested_area: str = field(default="", metadata=M_DEV)
     sw_version: str = field(default="", metadata=M_DEV)
@@ -58,7 +61,7 @@ class MQTTDevice:
     # shared options
     state_topic: str = field(default="", metadata=M_SHARED)
     command_topic: str = field(default="", metadata=M_SHARED)
-    qos: str = field(default="", metadata=M_SHARED)
+    qos: int | None = field(default=None, metadata=M_SHARED)
 
     availability_topics: list[str] = field(default_factory=list)
     """Additional availability topics for the device.
@@ -115,8 +118,10 @@ class MQTTDevice:
         if len(av_topics) == 1:
             disco_json["avty"] = {"topic": av_topics[0]}
         elif len(av_topics) > 1:
-            disco_json["avty_mode"] = "all"
             disco_json["avty"] = [{"topic": t} for t in av_topics]
+            effective_mode = self.availability_mode or "latest"
+            if effective_mode in ("all", "any"):
+                disco_json["avty_mode"] = effective_mode
 
         disco_json["cmps"] = cmps
 

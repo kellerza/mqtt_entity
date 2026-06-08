@@ -232,6 +232,49 @@ async def test_publish_discovery_merges_client_availability_topic() -> None:
             {"topic": "inverter/present"},
             {"topic": "addon/client_status"},
         ]
+        assert "avty_mode" not in configs[0]
+
+
+@pytest.mark.asyncio
+async def test_publish_discovery_availability_mode_all() -> None:
+    """``availability_mode`` ``all`` is emitted when set (HA requires all topics online)."""
+    with patch("mqtt_entity.client.Client") as paho_client_class:
+        cmock = paho_client_class.return_value = MagicMock(
+            spec=Client(callback_api_version=CallbackAPIVersion.VERSION2)
+        )
+        ok_seconds = time.time() + 0.3
+
+        def is_connected() -> bool:
+            nonlocal ok_seconds
+            if time.time() < ok_seconds:
+                return False
+            if ok_seconds:
+                mqc._mqtt_on_connect(cmock, None, None, 0)  # type:ignore[arg-type]
+                ok_seconds = 0
+            return True
+
+        cmock.is_connected.side_effect = is_connected
+
+        mqc = MQTTClient(
+            availability_topic="addon/client_status",
+            clean_entities=0,
+        )
+        await mqc.connect(MQTTOptions(mqtt_username="me", mqtt_password="secret"))
+        await mqc.wait_connected()
+
+        mqc.devs = [
+            MQTTDevice(
+                identifiers=["merge-test-all"],
+                name="Merge all",
+                components={},
+                availability_topics=["inverter/present"],
+                availability_mode="all",
+            ),
+        ]
+        await mqc.publish_discovery_info()
+
+        configs = _discovery_device_config_payloads(cmock)
+        assert len(configs) == 1
         assert configs[0]["avty_mode"] == "all"
 
 

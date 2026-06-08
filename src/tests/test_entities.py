@@ -151,6 +151,57 @@ def test_device_trigger() -> None:
     }
 
 
+def test_mqtt_device_discovery_registry_fields() -> None:
+    """Device registry fields and shared ``qos`` appear in discovery (abbreviated ``dev``)."""
+    ent = MQTTSensorEntity(
+        name="s",
+        unique_id="u1",
+        state_topic="/st",
+    )
+    dev = MQTTDevice(
+        identifiers=["dev1"],
+        components={"c1": ent},
+        connections=[("mac", "02:aa:bb:cc:dd:01")],
+        hw_version="1.0",
+        model_id="SKU-1",
+        serial_number="SN-99",
+        qos=1,
+    )
+    origin = MQTTOrigin(name="Origin")
+    _topic, d_dict = dev.discovery_info(availability_topic="/av", origin=origin)
+
+    assert d_dict["dev"]["ids"] == ["dev1"]
+    assert d_dict["dev"]["cns"] == [("mac", "02:aa:bb:cc:dd:01")]
+    assert d_dict["dev"]["hw"] == "1.0"
+    assert d_dict["dev"]["mdl_id"] == "SKU-1"
+    assert d_dict["dev"]["sn"] == "SN-99"
+    assert d_dict["qos"] == 1
+
+
+def test_mqtt_device_discovery_multi_availability_mode() -> None:
+    """Multiple ``avty`` topics: default omits ``avty_mode`` (HA ``latest``); ``any`` is set."""
+    ent = MQTTSensorEntity(name="s", unique_id="u1", state_topic="/st")
+    origin = MQTTOrigin(name="O")
+
+    dev_default = MQTTDevice(
+        identifiers=["d1"],
+        components={"c1": ent},
+        availability_topics=["t1", "t2"],
+    )
+    _, d0 = dev_default.discovery_info(origin=origin)
+    assert d0["avty"] == [{"topic": "t1"}, {"topic": "t2"}]
+    assert "avty_mode" not in d0
+
+    dev_any = MQTTDevice(
+        identifiers=["d2"],
+        components={"c1": ent},
+        availability_topics=["t1", "t2"],
+        availability_mode="any",
+    )
+    _, d1 = dev_any.discovery_info(origin=origin)
+    assert d1["avty_mode"] == "any"
+
+
 @pytest.mark.asyncio
 async def test_set_attributes() -> None:
     """Test set_attributes."""
