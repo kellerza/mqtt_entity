@@ -1,6 +1,7 @@
 """Test MQTT class."""
 
 import asyncio
+import json
 import logging
 import time
 from os import getenv
@@ -168,6 +169,112 @@ async def test_connect(caplog: pytest.LogCaptureFixture) -> None:
 
         await mqc.publish_discovery_info()
         assert cmock.publish.call_count == 2
+
+
+def _discovery_device_config_payloads(cmock: MagicMock) -> list[dict[str, object]]:
+    """Decode JSON discovery configs published under homeassistant/device/.../config."""
+    out: list[dict[str, object]] = []
+    for args, kwargs in cmock.publish.call_args_list:
+        topic = args[0] if args else kwargs.get("topic")
+        payload = args[1] if len(args) > 1 else kwargs.get("payload")
+        if (
+            not isinstance(topic, str)
+            or not topic.startswith("homeassistant/device/")
+            or not topic.endswith("/config")
+            or not isinstance(payload, str)
+            or not payload.startswith("{")
+        ):
+            continue
+        out.append(json.loads(payload))
+    return out
+
+
+@pytest.mark.asyncio
+async def test_publish_discovery_merges_client_availability_topic() -> None:
+    """Client ``availability_topic`` is merged into each device's discovery ``avty``."""
+    with patch("mqtt_entity.client.Client") as paho_client_class:
+        cmock = paho_client_class.return_value = MagicMock(
+            spec=Client(callback_api_version=CallbackAPIVersion.VERSION2)
+        )
+        ok_seconds = time.time() + 0.3
+
+        def is_connected() -> bool:
+            nonlocal ok_seconds
+            if time.time() < ok_seconds:
+                return False
+            if ok_seconds:
+                mqc._mqtt_on_connect(cmock, None, None, 0)  # type:ignore[arg-type]
+                ok_seconds = 0
+            return True
+
+        cmock.is_connected.side_effect = is_connected
+
+        mqc = MQTTClient(
+            availability_topic="addon/client_status",
+            clean_entities=0,
+        )
+        await mqc.connect(MQTTOptions(mqtt_username="me", mqtt_password="secret"))
+        await mqc.wait_connected()
+
+        mqc.devs = [
+            MQTTDevice(
+                identifiers=["merge-test"],
+                name="Merge",
+                components={},
+                availability_topics=["inverter/present"],
+            ),
+        ]
+        await mqc.publish_discovery_info()
+
+        configs = _discovery_device_config_payloads(cmock)
+        assert len(configs) == 1
+        assert configs[0]["avty"] == [
+            {"topic": "inverter/present"},
+            {"topic": "addon/client_status"},
+        ]
+        assert configs[0]["avty_mode"] == "all"
+
+
+@pytest.mark.asyncio
+async def test_publish_discovery_client_availability_topic_only() -> None:
+    """With no per-device topics, discovery ``avty`` is only the client's availability topic."""
+    with patch("mqtt_entity.client.Client") as paho_client_class:
+        cmock = paho_client_class.return_value = MagicMock(
+            spec=Client(callback_api_version=CallbackAPIVersion.VERSION2)
+        )
+        ok_seconds = time.time() + 0.3
+
+        def is_connected() -> bool:
+            nonlocal ok_seconds
+            if time.time() < ok_seconds:
+                return False
+            if ok_seconds:
+                mqc._mqtt_on_connect(cmock, None, None, 0)  # type:ignore[arg-type]
+                ok_seconds = 0
+            return True
+
+        cmock.is_connected.side_effect = is_connected
+
+        mqc = MQTTClient(
+            availability_topic="addon/only",
+            clean_entities=0,
+        )
+        await mqc.connect(MQTTOptions(mqtt_username="me", mqtt_password="secret"))
+        await mqc.wait_connected()
+
+        mqc.devs = [
+            MQTTDevice(
+                identifiers=["client-only"],
+                name="Client only",
+                components={},
+            ),
+        ]
+        await mqc.publish_discovery_info()
+
+        configs = _discovery_device_config_payloads(cmock)
+        assert len(configs) == 1
+        assert configs[0]["avty"] == {"topic": "addon/only"}
+        assert "avty_mode" not in configs[0]
 
 
 def test_mqttmatcher() -> None:

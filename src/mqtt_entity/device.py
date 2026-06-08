@@ -1,10 +1,20 @@
 """HASS MQTT Device, used for device based discovery."""
 
+from collections.abc import Iterable
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Literal
 
 from .entities import MQTTBaseEntity
 from .helpers import DEVREG_ABBREVIATE, ORIGIN_ABBREVIATE, as_dict, hass_abbreviate
+
+
+def unique_str(topics: Iterable[str]) -> list[str]:
+    """Return unique strings in first-seen order, omitting falsey values."""
+    out: list[str] = []
+    for t in topics:
+        if t and t not in out:
+            out.append(t)
+    return out
 
 
 @dataclass
@@ -20,6 +30,8 @@ class MQTTOrigin:
 
 M_SHARED = {"shared": True}
 M_DEV = {"dev": True}
+
+AvailabilityMode = Literal["", "all", "any", "latest"]
 
 
 @dataclass
@@ -48,10 +60,25 @@ class MQTTDevice:
     command_topic: str = field(default="", metadata=M_SHARED)
     qos: str = field(default="", metadata=M_SHARED)
 
+    availability_topics: list[str] = field(default_factory=list)
+    """Additional availability topics for the device.
+
+    The client's ``availability_topic`` can still be merged in with these during discovery info.
+    MQTT last-will only applies only to the MQTTClient's primary ``availability_topic``.
+    """
+
+    availability_mode: AvailabilityMode = ""
+    """When several availability topics are used: ``all``, ``any``, or ``latest`` (HA default if omitted)."""
+
     def __post_init__(self) -> None:
         """Post init."""
         if not self.identifiers:
             raise ValueError("MQTTDevice must have at least one identifier.")
+        if self.availability_mode not in ("", "all", "any", "latest"):
+            raise ValueError(
+                "availability_mode must be '', 'all', 'any', or 'latest', "
+                f"not {self.availability_mode!r}"
+            )
 
     @property
     def id(self) -> str:
@@ -59,16 +86,23 @@ class MQTTDevice:
         return str(self.identifiers[0])
 
     def discovery_info(
-        self, availability_topic: str, *, origin: MQTTOrigin
+        self,
+        *,
+        availability_topic: str = "",
+        origin: MQTTOrigin,
     ) -> tuple[str, dict[str, Any]]:
-        """Return the discovery dictionary for the MQTT device."""
+        """Return the discovery dictionary for the MQTT device.
+
+        An optional ``availability_topic`` will be added to the device's
+        :attr:`availability_topics`.
+        """
         cmps = {
             k: hass_abbreviate(v.as_discovery_dict) for k, v in self.components.items()
         }
         for key, platform in self.remove_components.items():
             cmps[key] = {"p": cmps[key]["p"] if key in cmps else platform}
 
-        disco_json = {
+        disco_json: dict[str, Any] = {
             "dev": hass_abbreviate(
                 as_dict(self, metadata_key="dev"), abbreviations=DEVREG_ABBREVIATE
             ),
@@ -77,8 +111,13 @@ class MQTTDevice:
         if shared := as_dict(self, metadata_key="shared"):
             disco_json.update(shared)
 
-        if availability_topic:
-            disco_json["avty"] = {"topic": availability_topic}
+        av_topics = unique_str((*self.availability_topics, availability_topic))
+        if len(av_topics) == 1:
+            disco_json["avty"] = {"topic": av_topics[0]}
+        elif len(av_topics) > 1:
+            disco_json["avty_mode"] = "all"
+            disco_json["avty"] = [{"topic": t} for t in av_topics]
+
         disco_json["cmps"] = cmps
 
         return f"homeassistant/device/{self.id}/config", disco_json

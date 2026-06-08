@@ -1,5 +1,8 @@
 # CHANGELOG
 
+## Unreleased
+
+- Per-device `MQTTDevice.availability_topics` / `availability_mode` for discovery;
 
 ## v0.1.1 (2025-06-21)
 
@@ -10,7 +13,6 @@
 
 - :dolphin: build
   ([`ee982eb`](https://github.com/kellerza/mqtt_entity/commit/ee982eb515ed29b2362d64eb44ff9e891ed92e5c))
-
 
 ## v0.1.0 (2025-06-20)
 
@@ -48,14 +50,12 @@
 - Update main.yml
   ([`40c99c1`](https://github.com/kellerza/mqtt_entity/commit/40c99c1c77c91288e843c47fc9d9d605946d3d65))
 
-
 ## v0.0.4 (2023-08-07)
 
 ### Other
 
 - 0.0.4
   ([`95df0ef`](https://github.com/kellerza/mqtt_entity/commit/95df0ef1e2d6facad0386f09edfa247846579cad))
-
 
 ## v0.0.3 (2023-05-19)
 
@@ -84,7 +84,6 @@
 
 - Union
   ([`65e4c3d`](https://github.com/kellerza/mqtt_entity/commit/65e4c3dbf2d468ce0e66ad10adbde96861759528))
-
 
 ## v0.0.2 (2023-04-17)
 

@@ -13,7 +13,7 @@ Features:
   - Retrieve MQTT service info from the Home Assistant Supervisor
 - Manage MQTT discovery info (adding/removing entities)
 - MQTTDevice class to manage devices
-  - Availability management
+  - Availability management (client-wide and optional per-device `availability_topics`)
   - Manage entities per device
 - Home Assistant Entities modelled as dataclasses:
   - Read-only: Sensor, BinarySensor
@@ -28,7 +28,8 @@ Features:
 
 ## Why?
 
-This MQTT code was included in several of my home Assistant addons (SMA-EM / Sunsynk). It is easier to update a single library & add new features, like discovery removal.
+This MQTT code was included in several of my home Assistant addons (SMA-EM / Sunsynk).
+It is easier to update a single library & add new features, like discovery removal.
 
 Alternative options (not based on asyncio)
 
@@ -43,7 +44,8 @@ Alternative options (not based on asyncio)
 
 Semantic versioning is used for release.
 
-To create a new release, include a commit with a :dolphin: emoji as a prefix in the commit message. This will trigger a release on the master branch.
+To create a new release, include a commit with a :dolphin: emoji as a prefix in the commit message.
+This will trigger a release on the master branch.
 
 ```bash
 # Patch

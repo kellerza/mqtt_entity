@@ -1,6 +1,6 @@
 [build-system]
 build-backend = "uv_build"
-requires = [ "uv-build>=0.10,<0.11" ]
+requires = [ "uv-build>=0.11,<0.12" ]
 
 [project]
 name = "mqtt-entity"
@@ -42,6 +42,7 @@ dev = [
   "pytest-cov",
   "pytest-env",
   "pytest-github-actions-annotate-failures",
+  "rumdl>=0.2.9",
   "types-pyyaml",
   "zuban>=0.5.1",
 ]
@@ -81,15 +82,15 @@ lint.pylint.max-args = 7
 ignore-words-list = "hass"
 
 [tool.pytest]
-ini_options.pythonpath = [ ".", "src" ]
 ini_options.testpaths = "src/tests"
-ini_options.filterwarnings = "ignore:.+@coroutine.+deprecated.+"
+ini_options.pythonpath = [ ".", "src" ]
 ini_options.norecursedirs = [ ".git", "modules" ]
+ini_options.addopts = "--cov=src --cov-report xml:cov.xml"
+ini_options.filterwarnings = "ignore:.+@coroutine.+deprecated.+"
 ini_options.log_cli = true
 ini_options.log_cli_level = "DEBUG"
-ini_options.asyncio_mode = "auto"
-ini_options.addopts = "--cov=src --cov-report xml:cov.xml"
 ini_options.asyncio_default_fixture_loop_scope = "function"
+ini_options.asyncio_mode = "auto"
 ini_options.env = [
   "MQTT_HOST=192.168.1.8",
   "MQTT_PASSWORD=hass123",
@@ -97,19 +98,32 @@ ini_options.env = [
 ]
 
 [tool.semantic_release]
-commit = true
-tag = true
-vcs_release = true
-commit_parser = "emoji"
 # https://python-semantic-release.readthedocs.io/en/latest/configuration.html#version-toml
 version_toml = [ "pyproject.toml:project.version" ]
 build_command = "pip install uv && uv build"
-commit_version_number = true
-branches.main.match = "main"
+commit_parser = "emoji"
 commit_parser_options.major_tags = [ ":boom:" ]
 commit_parser_options.minor_tags = [ ":rocket:" ]
 commit_parser_options.patch_tags = [ "" ]
+branches.main.match = "main"
+commit = true
+commit_version_number = true
+tag = true
+vcs_release = true
 
 [tool.zuban]
 warn_unreachable = false
 warn_unused_ignores = true  # Not yet supported in 0.6.0
+
+[tool.rumdl]
+line-length = 100
+exclude = [ ".git", "node_modules" ]
+respect-gitignore = true
+extend-enable = [ "MD060" ]  # table formatting
+MD013.severity = "info"
+MD013.line-length = 100
+MD013.code_blocks = false
+MD013.tables = false
+MD013.reflow = true
+MD013.reflow-mode = "sentence-per-line"
+per-file-ignores."CHANGELOG.md" = [ "MD026" ]

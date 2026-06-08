@@ -321,7 +321,7 @@ class MQTTClient(MQTTAsyncClient):
 
         for ddev in self.devs:
             disco_topic, disco_dict = ddev.discovery_info(
-                self.availability_topic,
+                availability_topic=self.availability_topic,
                 origin=MQTTOrigin(
                     name=self.origin_name,
                     sw=self.origin_version,
