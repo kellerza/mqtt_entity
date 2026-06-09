@@ -45,7 +45,7 @@ def test_dev() -> None:
         MQTTDevice()  # type: ignore[call-arg]
     with pytest.raises(ValueError):
         MQTTDevice(identifiers=[], components={})
-    MQTTDevice(identifiers=["123"], components={})
+    MQTTDevice(identifiers=[("serial", "123")], components={})
 
 
 def test_mqtt_entity() -> None:
@@ -56,13 +56,13 @@ def test_mqtt_entity() -> None:
         state_topic="/test/a",
     )
 
-    dev = MQTTDevice(identifiers=["123"], components={"789": ent})
+    dev = MQTTDevice(identifiers=[("serial", "123")], components={"789": ent})
     origin = MQTTOrigin(name="Test Origin")
     d_topic, d_dict = dev.discovery_info(availability_topic="/blah", origin=origin)
 
     assert d_topic == "homeassistant/device/123/config"
     assert d_dict == {
-        "dev": {"ids": ["123"]},
+        "dev": {"ids": [("serial", "123")]},
         "o": {"name": "Test Origin"},
         "avty": {"topic": "/blah"},
         "cmps": {
@@ -86,13 +86,13 @@ def test_discovery_extra() -> None:
         discovery_extra={"a": "b", "state_topic": "c"},
     )
 
-    dev = MQTTDevice(identifiers=["123"], components={"789": ent})
+    dev = MQTTDevice(identifiers=[("serial", "123")], components={"789": ent})
     origin = MQTTOrigin(name="Test Origin")
     d_topic, d_dict = dev.discovery_info(availability_topic="/blah", origin=origin)
 
     assert d_topic == "homeassistant/device/123/config"
     assert d_dict == {
-        "dev": {"ids": ["123"]},
+        "dev": {"ids": [("serial", "123")]},
         "o": {"name": "Test Origin"},
         "avty": {"topic": "/blah"},
         "cmps": {
@@ -120,7 +120,10 @@ def test_device_trigger() -> None:
         topic="zigbee2mqtt/0x90fd9ffffedf1266/action",
     )
 
-    dev = MQTTDevice(identifiers=["123", "456"], components={"trigger1": trig})
+    dev = MQTTDevice(
+        identifiers=[("serial", "123"), ("serial", "456")],
+        components={"trigger1": trig},
+    )
     origin = MQTTOrigin(name="Test Origin")
     d_topic, d_dict = dev.discovery_info(availability_topic="/blah", origin=origin)
 
@@ -128,8 +131,8 @@ def test_device_trigger() -> None:
     assert d_dict == {
         "dev": {
             "ids": [
-                "123",
-                "456",
+                ("serial", "123"),
+                ("serial", "456"),
             ],
         },
         "o": {
@@ -159,7 +162,7 @@ def test_mqtt_device_discovery_registry_fields() -> None:
         state_topic="/st",
     )
     dev = MQTTDevice(
-        identifiers=["dev1"],
+        identifiers=[("serial", "dev1")],
         components={"c1": ent},
         connections=[("mac", "02:aa:bb:cc:dd:01")],
         hw_version="1.0",
@@ -170,7 +173,7 @@ def test_mqtt_device_discovery_registry_fields() -> None:
     origin = MQTTOrigin(name="Origin")
     _topic, d_dict = dev.discovery_info(availability_topic="/av", origin=origin)
 
-    assert d_dict["dev"]["ids"] == ["dev1"]
+    assert d_dict["dev"]["ids"] == [("serial", "dev1")]
     assert d_dict["dev"]["cns"] == [("mac", "02:aa:bb:cc:dd:01")]
     assert d_dict["dev"]["hw"] == "1.0"
     assert d_dict["dev"]["mdl_id"] == "SKU-1"
@@ -184,7 +187,7 @@ def test_mqtt_device_discovery_multi_availability_mode() -> None:
     origin = MQTTOrigin(name="O")
 
     dev_default = MQTTDevice(
-        identifiers=["d1"],
+        identifiers=[("serial", "d1")],
         components={"c1": ent},
         availability_topics=["t1", "t2"],
     )
@@ -193,7 +196,7 @@ def test_mqtt_device_discovery_multi_availability_mode() -> None:
     assert "avty_mode" not in d0
 
     dev_any = MQTTDevice(
-        identifiers=["d2"],
+        identifiers=[("serial", "d2")],
         components={"c1": ent},
         availability_topics=["t1", "t2"],
         availability_mode="any",

@@ -6,6 +6,7 @@ from typing import Any, Literal
 
 from .entities import MQTTBaseEntity
 from .helpers import DEVREG_ABBREVIATE, ORIGIN_ABBREVIATE, as_dict, hass_abbreviate
+from .utils import slug
 
 
 def unique_str(topics: Iterable[str]) -> list[str]:
@@ -38,7 +39,7 @@ AvailabilityMode = Literal["", "all", "any", "latest"]
 class MQTTDevice:
     """Base class for MQTT Device Discovery. A Home Assistant Device groups entities."""
 
-    identifiers: list[str | tuple[str, Any]] = field(metadata=M_DEV)
+    identifiers: list[tuple[str, Any]] = field(metadata=M_DEV)
 
     components: dict[str, MQTTBaseEntity]
     """MQTT component entities."""
@@ -77,6 +78,12 @@ class MQTTDevice:
         """Post init."""
         if not self.identifiers:
             raise ValueError("MQTTDevice must have at least one identifier.")
+
+        for idx in range(len(self.identifiers)):
+            _id = self.identifiers[idx]
+            if not isinstance(_id, tuple):
+                self.identifiers[idx] = ("serial", str(_id))
+
         if self.availability_mode not in ("", "all", "any", "latest"):
             raise ValueError(
                 "availability_mode must be '', 'all', 'any', or 'latest', "
@@ -86,7 +93,8 @@ class MQTTDevice:
     @property
     def id(self) -> str:
         """The device identifier. Also object_id."""
-        return str(self.identifiers[0])
+        _id = self.identifiers[0]
+        return slug(str(_id[1] if isinstance(_id, tuple) else _id))
 
     def discovery_info(
         self,

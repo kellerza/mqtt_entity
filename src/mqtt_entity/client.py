@@ -7,7 +7,7 @@ import importlib.metadata
 import inspect
 import logging
 import time
-from collections.abc import Callable, Coroutine, Generator
+from collections.abc import Awaitable, Callable, Coroutine, Generator
 from dataclasses import dataclass, field
 from json import dumps
 from typing import Any, cast
@@ -268,6 +268,9 @@ class MQTTClient(MQTTAsyncClient):
     clean_entities: int = 1
     """Clean entities on discovery: 1=migrate, 2=remove, 0=none."""
 
+    on_ha_connected: Callable[[], Awaitable[None]] | None = None
+    """Callback to be called when the client & Home Assistant are connected."""
+
     def monitor_homeassistant_status(self) -> None:
         """Monitor homeassistant/status & publish discovery info."""
         if HA_STATUS_TOPIC in self._on_message_filtered:
@@ -340,6 +343,15 @@ class MQTTClient(MQTTAsyncClient):
                 tcb.update(ent.topic_callbacks)
             for topic, cbk in tcb.items():
                 self.topic_subscribe(topic, cbk)
+
+        if self.on_ha_connected:
+            await self.on_ha_connected()
+
+    async def publish_availability(
+        self, topic: str, online: bool, retain: bool = False
+    ) -> None:
+        """Publish availability topic."""
+        await self.publish(topic, "online" if online else "offline", retain=retain)
 
     def _clean_entity_based_discovery(self) -> None:
         """Remove entity based discovery as part of discovery info.

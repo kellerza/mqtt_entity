@@ -70,12 +70,12 @@ async def test_mqtt_server() -> None:
     select_ent2.on_command = select_select2
     mqc.devs = [
         MQTTDevice(
-            identifiers=["test456"],
+            identifiers=[("serial", "test456")],
             name="Test Device",
             components={e.unique_id: e for e in [select_ent, select_ent2, sense_ent]},
         ),
         MQTTDevice(
-            identifiers=["test789"],
+            identifiers=[("serial", "test789")],
             name="Test Device 2",
             components={},
         ),
@@ -161,7 +161,7 @@ async def test_connect(caplog: pytest.LogCaptureFixture) -> None:
 
         mqc.devs = [
             MQTTDevice(
-                identifiers=["test123"],
+                identifiers=[("serial", "test123")],
                 name="Test Device",
                 components={},
             )
@@ -218,7 +218,7 @@ async def test_publish_discovery_merges_client_availability_topic() -> None:
 
         mqc.devs = [
             MQTTDevice(
-                identifiers=["merge-test"],
+                identifiers=[("serial", "merge-test")],
                 name="Merge",
                 components={},
                 availability_topics=["inverter/present"],
@@ -264,7 +264,7 @@ async def test_publish_discovery_availability_mode_all() -> None:
 
         mqc.devs = [
             MQTTDevice(
-                identifiers=["merge-test-all"],
+                identifiers=[("serial", "merge-test-all")],
                 name="Merge all",
                 components={},
                 availability_topics=["inverter/present"],
@@ -307,7 +307,7 @@ async def test_publish_discovery_client_availability_topic_only() -> None:
 
         mqc.devs = [
             MQTTDevice(
-                identifiers=["client-only"],
+                identifiers=[("serial", "client-only")],
                 name="Client only",
                 components={},
             ),

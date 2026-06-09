@@ -81,6 +81,11 @@ lint.pylint.max-args = 7
 [tool.codespell]
 ignore-words-list = "hass"
 
+[tool.pyrefly]
+project-includes = [
+  "src/**/*.py*",
+]
+
 [tool.pytest]
 ini_options.testpaths = "src/tests"
 ini_options.pythonpath = [ ".", "src" ]
