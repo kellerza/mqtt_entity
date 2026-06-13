@@ -344,6 +344,7 @@ class MQTTClient(MQTTAsyncClient):
             for topic, cbk in tcb.items():
                 self.topic_subscribe(topic, cbk)
 
+        await self.publish_availability(self.availability_topic, True, retain=True)
         if self.on_ha_connected:
             await self.on_ha_connected()
 

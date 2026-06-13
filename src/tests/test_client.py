@@ -158,6 +158,9 @@ async def test_connect(caplog: pytest.LogCaptureFixture) -> None:
         await mqc.publish_discovery_info()
         assert "No devices" in caplog.text
         assert cmock.publish.call_count == 1
+        assert cmock.publish.call_args_list == [
+            call("test/status", "online", retain=True),
+        ]
 
         mqc.devs = [
             MQTTDevice(
@@ -168,7 +171,22 @@ async def test_connect(caplog: pytest.LogCaptureFixture) -> None:
         ]
 
         await mqc.publish_discovery_info()
-        assert cmock.publish.call_count == 2
+        assert cmock.publish.call_count == 3
+
+        disco_info = json.dumps(
+            {
+                "dev": {"ids": [("serial", "test123")], "name": "Test Device"},
+                "o": {"name": "mqtt-entity", "sw": "1.1.8"},
+                "avty": {"topic": "test/status"},
+                "cmps": {},
+            }
+        )
+
+        assert cmock.publish.call_args_list == [
+            call("test/status", "online", retain=True),
+            call("homeassistant/device/test123/config", disco_info, 0, False),
+            call("test/status", "online", 1, True),
+        ]
 
 
 def _discovery_device_config_payloads(cmock: MagicMock) -> list[dict[str, object]]:

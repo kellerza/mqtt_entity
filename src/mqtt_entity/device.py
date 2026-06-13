@@ -39,7 +39,7 @@ AvailabilityMode = Literal["", "all", "any", "latest"]
 class MQTTDevice:
     """Base class for MQTT Device Discovery. A Home Assistant Device groups entities."""
 
-    identifiers: list[tuple[str, Any]] = field(metadata=M_DEV)
+    identifiers: list[str | tuple[str, Any]] = field(metadata=M_DEV)
 
     components: dict[str, MQTTBaseEntity]
     """MQTT component entities."""
@@ -78,11 +78,6 @@ class MQTTDevice:
         """Post init."""
         if not self.identifiers:
             raise ValueError("MQTTDevice must have at least one identifier.")
-
-        for idx in range(len(self.identifiers)):
-            _id = self.identifiers[idx]
-            if not isinstance(_id, tuple):
-                self.identifiers[idx] = ("serial", str(_id))
 
         if self.availability_mode not in ("", "all", "any", "latest"):
             raise ValueError(
