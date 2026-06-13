@@ -1,6 +1,7 @@
 """Test MQTT class."""
 
 import asyncio
+import importlib.metadata
 import json
 import logging
 import time
@@ -173,10 +174,11 @@ async def test_connect(caplog: pytest.LogCaptureFixture) -> None:
         await mqc.publish_discovery_info()
         assert cmock.publish.call_count == 3
 
+        pkg_version = importlib.metadata.version("mqtt-entity")
         disco_info = json.dumps(
             {
                 "dev": {"ids": [("serial", "test123")], "name": "Test Device"},
-                "o": {"name": "mqtt-entity", "sw": "1.1.8"},
+                "o": {"name": "mqtt-entity", "sw": pkg_version},
                 "avty": {"topic": "test/status"},
                 "cmps": {},
             }
