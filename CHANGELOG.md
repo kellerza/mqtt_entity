@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+### What's changed
+
+| Before | After |
+| --- | --- |
+| `connect_async` + `loop_start()` | `async_start()` + `async_connect()` |
+| `loop_stop()` via `asyncio.to_thread` | `async_stop()` |
+| `asyncio.to_thread(client.publish, …)` | `async_publish()` with broker ACK wait |
+| sync `client.subscribe()` / `unsubscribe()` | `async_subscribe()` / `async_unsubscribe()` with broker ACK wait |
+| paho callbacks on background thread | callbacks on the event loop |
+| `call_soon_threadsafe(create_task(...))` for async handlers | direct `create_task()` |
+
+- MQTT transport now runs on the asyncio event loop via `AClient` (Home Assistant-style
+  async paho wrapper) instead of `connect_async` + `loop_start()` in a background thread.
+- `MQTTAsyncClient` runs a Home Assistant-style reconnect loop after disconnect instead
+  of relying on paho's `loop_misc` auto-reconnect.
+- `publish`, `topic_subscribe`, and `topic_unsubscribe` wait for broker ACKs.
+- Reconnect explicitly disconnects the previous session before opening a new connection.
+- `monitor_homeassistant_status`, `topic_subscribe`, and `topic_unsubscribe` are now
+  async; callers must `await` them.
 - Per-device `MQTTDevice.availability_topics` / `availability_mode` for discovery;
 - `MQTTDevice`: device registry fields `hw_version`, `model_id`, `serial_number`; `connections` typed as `list[tuple[str, str]]`; `qos` as `int | None`.
   Multi-topic discovery omits `avty_mode` by default (Home Assistant default `latest`); set `availability_mode` to `"all"` or `"any"` to emit `avty_mode`.

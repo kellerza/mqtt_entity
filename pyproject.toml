@@ -1,6 +1,6 @@
 [build-system]
 build-backend = "uv_build"
-requires = [ "uv-build>=0.11,<0.12" ]
+requires = [ "uv-build>=0.12,<0.13" ]
 
 [project]
 name = "mqtt-entity"
@@ -75,7 +75,7 @@ lint.select = [
   "UP",    # pyupgrade
   "W",     # pycodestyle
 ]
-lint.ignore = [ "D203", "D213", "E203", "E501", "PLR2004" ]
+lint.ignore = [ "B019", "D203", "D213", "E203", "E501", "PLR2004" ]
 lint.pylint.max-args = 7
 
 [tool.codespell]

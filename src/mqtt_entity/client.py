@@ -12,17 +12,28 @@ from dataclasses import dataclass, field
 from json import dumps
 from typing import Any, cast
 
-from paho.mqtt.client import Client, MQTTMessage
+import paho.mqtt.client as mqtt
+from paho.mqtt.client import (
+    CallbackOnConnect_v2,
+    CallbackOnDisconnect_v2,
+    CallbackOnMessage,
+    ConnectFlags,
+    DisconnectFlags,
+    MQTTMessage,
+)
 from paho.mqtt.enums import CallbackAPIVersion
 from paho.mqtt.matcher import MQTTMatcher
+from paho.mqtt.properties import Properties
 from paho.mqtt.reasoncodes import ReasonCode
 
+from .async_client import AClient
 from .device import MQTTDevice, MQTTOrigin
 from .utils import load_json
 
 HA_STATUS_TOPIC = "homeassistant/status"
 _LOG = logging.getLogger(__name__)
 MQTT_EXPLORER_LIMIT = 20000
+_RECONNECT_INTERVAL_SECONDS = 10
 
 type SyncCallback = Callable[[str, str], None]
 type AsyncCallback = Callable[[str, str], Coroutine[Any, Any, None]]
@@ -35,7 +46,7 @@ class MQTTAsyncClient:
     """Async MQTT Client."""
 
     availability_topic: str = ""
-    client: Client = field(init=False, repr=False)
+    client: AClient = field(init=False, repr=False)
     suppress_exceptions: bool = True
     connect_time: float = field(init=False, repr=False)
 
@@ -44,13 +55,29 @@ class MQTTAsyncClient:
         repr=False,
     )
     _loop: asyncio.AbstractEventLoop = field(init=False, repr=False)
+    _should_reconnect: bool = field(init=False, repr=False)
+    _reconnect_task: asyncio.Task[None] | None = field(init=False, repr=False)
+    _connect_host: str = field(init=False, repr=False)
+    _connect_port: int = field(init=False, repr=False)
+    _connect_keepalive: int = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
         """Init."""
         self.connect_time = 0
-        self.client = Client(callback_api_version=CallbackAPIVersion.VERSION2)
-        self.client.on_connect = self._mqtt_on_connect
-        self.client.on_message = self._mqtt_on_message
+        self._should_reconnect = False
+        self._reconnect_task = None
+        self._connect_host = ""
+        self._connect_port = 1883
+        self._connect_keepalive = 60
+        self.client = AClient(
+            callback_api_version=CallbackAPIVersion.VERSION2,
+            reconnect_on_failure=False,
+        )
+        self.client.on_connect = cast(CallbackOnConnect_v2, self._mqtt_on_connect)
+        self.client.on_disconnect = cast(
+            CallbackOnDisconnect_v2, self._mqtt_on_disconnect
+        )
+        self.client.on_message = cast(CallbackOnMessage, self._mqtt_on_message)
 
     async def connect(
         self,
@@ -63,9 +90,12 @@ class MQTTAsyncClient:
         wait_connected: bool = False,
     ) -> None:
         """Connect to MQTT server specified as attributes of the options."""
-        if self.client.is_connected():
+        reconnecting = self.client.is_connected()
+        if reconnecting:
             _LOG.warning("MQTT: Client connected. Reconnecting...")
         await self.disconnect()  # "Connection Successful" triggered on re-connect
+        if reconnecting and self.client.is_connected():
+            await asyncio.to_thread(self.client.disconnect)
         self._loop = asyncio.get_running_loop()
 
         if options:
@@ -79,36 +109,90 @@ class MQTTAsyncClient:
             self.client.will_set(self.availability_topic, "offline", retain=True)
 
         _LOG.info("MQTT: Connecting to %s@%s:%s", username, host, port)
-        self.client.connect_async(host=host, port=port)
-        self.client.loop_start()
+        self._connect_host = host
+        self._connect_port = port
+        self._connect_keepalive = 60
+        self._should_reconnect = True
+        self._cancel_reconnect()
+        await self.client.async_start(self._loop)
+        self.client._socket_close_listener = self._on_connection_lost
         self.connect_time = time.time() + 5
+        try:
+            await self.client.async_connect(host=host, port=port)
+        except ConnectionError:
+            self.connect_time = -1
+            raise
 
         if wait_connected:
             await self.wait_connected()
 
+    def _on_connection_lost(self) -> None:
+        """Start reconnect after the broker connection is lost."""
+        if self._should_reconnect and not self._reconnect_task:
+            self._reconnect_task = self._loop.create_task(self._reconnect_loop())
+
+    def _cancel_reconnect(self) -> None:
+        """Cancel the reconnect loop."""
+        if self._reconnect_task is None:
+            return
+        self._reconnect_task.cancel()
+        self._reconnect_task = None
+
+    async def _reconnect_loop(self) -> None:
+        """Reconnect to the MQTT broker until connected or stopped."""
+        try:
+            while self._should_reconnect:
+                if not self.client.is_connected():
+                    try:
+                        async with (
+                            self.client._connection_lock,
+                            self.client._connect_in_executor(),
+                        ):
+                            result = await asyncio.to_thread(self.client.reconnect)
+                        if result != mqtt.MQTT_ERR_SUCCESS:
+                            _LOG.debug(
+                                "MQTT: Reconnect failed: %s",
+                                mqtt.error_string(result),
+                            )
+                    except (OSError, ValueError, mqtt.WebsocketConnectionError) as err:
+                        _LOG.debug("MQTT: Reconnect error: %s", err)
+                await asyncio.sleep(_RECONNECT_INTERVAL_SECONDS)
+        except asyncio.CancelledError:
+            return
+        finally:
+            self._reconnect_task = None
+
+    def _mqtt_on_disconnect(
+        self,
+        _client: AClient,
+        _userdata: Any,
+        _disconnect_flags: DisconnectFlags,
+        _reason_code: ReasonCode,
+        _properties: Properties | None = None,
+    ) -> None:
+        """MQTT on_disconnect callback."""
+        self._on_connection_lost()
+
     def _mqtt_on_connect(
         self,
-        client: Client,
-        data: Any,
-        flags: Any,
-        rc: ReasonCode,
-        prop: Any = None,
+        client: AClient,
+        userdata: Any,
+        flags: ConnectFlags,
+        reason_code: ReasonCode,
+        properties: Properties | None = None,
     ) -> None:
         """MQTT on_connect callback."""
-        if rc != 0:
-            _LOG.error("MQTT: Connection failed with reason code %s", rc)
+        if reason_code != 0:
+            _LOG.error("MQTT: Connection failed with reason code %s", reason_code)
             self.connect_time = -1  # failed
             return
+        self._cancel_reconnect()
         _LOG.info("MQTT: Connected")
         # publish online (Last will sets offline on disconnect)
         if self.availability_topic:
             client.publish(self.availability_topic, "online", retain=True)
         # Subscribe to all existing change handlers (on connect/reconnect).
-        # Snapshot keys to avoid RuntimeError from concurrent modification —
-        # this callback runs in paho's thread while the asyncio loop may call
-        # topic_subscribe()/topic_unsubscribe() concurrently.
-        for topic in list(self._on_message_filtered.keys()):
-            client.subscribe(topic)
+        self._loop.create_task(self._resubscribe_topics())
 
     async def wait_connected(self) -> None:
         """Wait until connected."""
@@ -116,7 +200,7 @@ class MQTTAsyncClient:
             return
         if self.connect_time == 0:
             raise RuntimeError("MQTT: Call connect first")
-        # If the original deadline has already passed, paho's auto-reconnect
+        # If the original deadline has already passed, the reconnect loop
         # may be in progress. Give it a fresh window instead of failing
         # immediately with a stale deadline from the initial connect().
         if self.connect_time > 0 and time.time() > self.connect_time:
@@ -136,12 +220,16 @@ class MQTTAsyncClient:
 
     async def disconnect(self) -> None:
         """Stop the MQTT client."""
+        self._should_reconnect = False
+        self._cancel_reconnect()
+        self.client._socket_close_listener = None
+        await self.client.async_stop()
 
-        def _stop() -> None:
-            """Do not disconnect, allow the broker to publish LWT message."""
-            self.client.loop_stop()
-
-        await asyncio.to_thread(_stop)
+    async def _resubscribe_topics(self) -> None:
+        """Re-subscribe all registered topics after connect/reconnect."""
+        # Snapshot keys to avoid RuntimeError from concurrent modification.
+        for topic in list(self._on_message_filtered.keys()):
+            await self.client.async_subscribe(topic)
 
     def publish_args(
         self, topic: str, payload: str | None, qos: int, retain: bool
@@ -174,20 +262,24 @@ class MQTTAsyncClient:
         """Publish a MQTT message."""
         args = self.publish_args(topic, payload, qos, retain)
         await self.wait_connected()
-        await asyncio.to_thread(self.client.publish, *args)
+        await self.client.async_publish(*args)
 
-    def topic_unsubscribe(self, topic: str) -> None:
+    async def topic_unsubscribe(self, topic: str) -> None:
         """Remove a topic from the topic callbacks."""
-        self.client.unsubscribe(topic)
+        await self.wait_connected()
+        await self.client.async_unsubscribe(topic)
         self._on_message_filtered.pop(topic)
 
-    def topic_subscribe(self, topic: str, callback: TopicCallback) -> None:
+    async def topic_subscribe(self, topic: str, callback: TopicCallback) -> None:
         """Add a topic to the topic callbacks."""
         _LOG.debug("MQTT: Add callback for topic %s", topic)
         self._on_message_filtered[topic] = callback
-        self.client.subscribe(topic)
+        await self.wait_connected()
+        await self.client.async_subscribe(topic)
 
-    def _mqtt_on_message(self, c: Client, userdata: Any, message: MQTTMessage) -> None:
+    def _mqtt_on_message(
+        self, client: AClient, userdata: Any, message: MQTTMessage
+    ) -> None:
         """MQTT on_message fallback."""
         topic = message.topic
         payload = message.payload.decode("utf-8")
@@ -251,7 +343,7 @@ class MQTTAsyncClient:
                     if not self.suppress_exceptions:
                         raise
 
-        self._loop.call_soon_threadsafe(lambda: self._loop.create_task(cbs()))
+        self._loop.create_task(cbs())
 
 
 @dataclass()
@@ -271,7 +363,12 @@ class MQTTClient(MQTTAsyncClient):
     on_ha_connected: Callable[[], Awaitable[None]] | None = None
     """Callback to be called when the client & Home Assistant are connected."""
 
-    def monitor_homeassistant_status(self) -> None:
+    _clean_unsubscribe_task: asyncio.Task[None] | None = field(
+        default=None,
+        repr=False,
+    )
+
+    async def monitor_homeassistant_status(self) -> None:
         """Monitor homeassistant/status & publish discovery info."""
         if HA_STATUS_TOPIC in self._on_message_filtered:
             return
@@ -308,7 +405,7 @@ class MQTTClient(MQTTAsyncClient):
             )
             await self.publish_discovery_info()
 
-        self.topic_subscribe(HA_STATUS_TOPIC, _online_cb)
+        await self.topic_subscribe(HA_STATUS_TOPIC, _online_cb)
         if self.connect_time == 0:
             raise ConnectionError()
 
@@ -319,7 +416,7 @@ class MQTTClient(MQTTAsyncClient):
             return
 
         if self.clean_entities:
-            self._clean_entity_based_discovery()
+            await self._clean_entity_based_discovery()
             await asyncio.sleep(1)
 
         for ddev in self.devs:
@@ -342,7 +439,7 @@ class MQTTClient(MQTTAsyncClient):
             for ent in ddev.components.values():
                 tcb.update(ent.topic_callbacks)
             for topic, cbk in tcb.items():
-                self.topic_subscribe(topic, cbk)
+                await self.topic_subscribe(topic, cbk)
 
         await self.publish_availability(self.availability_topic, True, retain=True)
         if self.on_ha_connected:
@@ -354,7 +451,7 @@ class MQTTClient(MQTTAsyncClient):
         """Publish availability topic."""
         await self.publish(topic, "online" if online else "offline", retain=retain)
 
-    def _clean_entity_based_discovery(self) -> None:
+    async def _clean_entity_based_discovery(self) -> None:
         """Remove entity based discovery as part of discovery info.
 
         https://www.home-assistant.io/docs/mqtt/discovery/
@@ -390,7 +487,7 @@ class MQTTClient(MQTTAsyncClient):
                 uid = payload["unique_id"]
                 if uid not in dev.components:
                     _LOG.info("MQTT: Removing unique ID %s", uid)
-                    self.client.publish(topic=topic, payload=None, qos=1, retain=True)
+                    await self.publish(topic=topic, payload=None, qos=1, retain=True)
 
             return _cb_remove
 
@@ -398,10 +495,21 @@ class MQTTClient(MQTTAsyncClient):
             return
         migrate = self.clean_entities == 1
         self.clean_entities = 0
+        clean_topics: list[str] = []
         for dev in self.devs:
             topic = f"homeassistant/+/{dev.id}/+/config"
-            self.topic_subscribe(topic, cb_migrate if migrate else cb_remove(dev))
-            asyncio.get_running_loop().call_later(10, self.topic_unsubscribe, topic)
+            await self.topic_subscribe(topic, cb_migrate if migrate else cb_remove(dev))
+            clean_topics.append(topic)
+
+        if not clean_topics:
+            return
+
+        async def _delayed_unsubscribe() -> None:
+            await asyncio.sleep(10)
+            for topic in clean_topics:
+                await self.topic_unsubscribe(topic)
+
+        self._clean_unsubscribe_task = asyncio.create_task(_delayed_unsubscribe())
 
 
 class MQTTMatcher2(MQTTMatcher):

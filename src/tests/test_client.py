@@ -6,7 +6,7 @@ import json
 import logging
 import time
 from os import getenv
-from unittest.mock import MagicMock, Mock, call, patch
+from unittest.mock import AsyncMock, MagicMock, Mock, call, patch
 
 import pytest
 from paho.mqtt.client import Client
@@ -17,6 +17,19 @@ from mqtt_entity.client import HA_STATUS_TOPIC, MQTTMatcher2
 from mqtt_entity.options import MQTTOptions
 
 _LOG = logging.getLogger(__name__)
+
+
+def _mock_paho_client() -> MagicMock:
+    """Return a mock AsyncMQTTClient with async transport methods."""
+    cmock = MagicMock(spec=Client(callback_api_version=CallbackAPIVersion.VERSION2))
+    cmock.async_start = AsyncMock()
+    cmock.async_connect = AsyncMock()
+    cmock.async_stop = AsyncMock()
+    cmock.async_publish = AsyncMock()
+    cmock.async_subscribe = AsyncMock()
+    cmock.async_unsubscribe = AsyncMock()
+    cmock.disconnect = MagicMock()
+    return cmock
 
 
 @pytest.mark.asyncio
@@ -71,12 +84,12 @@ async def test_mqtt_server() -> None:
     select_ent2.on_command = select_select2
     mqc.devs = [
         MQTTDevice(
-            identifiers=[("serial", "test456")],
+            identifiers=["test456"],
             name="Test Device",
             components={e.unique_id: e for e in [select_ent, select_ent2, sense_ent]},
         ),
         MQTTDevice(
-            identifiers=[("serial", "test789")],
+            identifiers=["test789"],
             name="Test Device 2",
             components={},
         ),
@@ -88,7 +101,7 @@ async def test_mqtt_server() -> None:
         host=getenv("MQTT_HOST", ""),
     )
 
-    mqc.monitor_homeassistant_status()
+    await mqc.monitor_homeassistant_status()
     await asyncio.sleep(0.5)
 
     await select_ent.send_state(mqc, "opt2")
@@ -103,11 +116,9 @@ async def test_mqtt_server() -> None:
 @pytest.mark.asyncio
 async def test_connect(caplog: pytest.LogCaptureFixture) -> None:
     """Test connect."""
-    with patch("mqtt_entity.client.Client") as paho_client_class:  # patch paho Client
+    with patch("mqtt_entity.client.AClient") as paho_client_class:  # patch paho Client
         # return a mock when you instantiate
-        cmock = paho_client_class.return_value = MagicMock(
-            spec=Client(callback_api_version=CallbackAPIVersion.VERSION2)
-        )
+        cmock = paho_client_class.return_value = _mock_paho_client()
         mqc = MQTTClient(availability_topic="test/status")
 
         ok_seconds = time.time() + 0.3
@@ -134,8 +145,8 @@ async def test_connect(caplog: pytest.LogCaptureFixture) -> None:
         await mqc.connect(MQTTOptions(mqtt_username="me", mqtt_password="secret"))
 
         assert cmock.is_connected.called
-        assert cmock.loop_start.call_count == 1
-        assert cmock.connect_async.call_args_list == [
+        assert cmock.async_start.call_count == 1
+        assert cmock.async_connect.call_args_list == [
             call(host="core-mosquitto", port=1883)
         ]
         assert cmock.username_pw_set.call_args_list == [
@@ -147,13 +158,13 @@ async def test_connect(caplog: pytest.LogCaptureFixture) -> None:
 
         assert not cmock.is_connected()
 
-        mqc.monitor_homeassistant_status()
+        await mqc.monitor_homeassistant_status()
 
-        assert "MQTT: Connected" not in caplog.text
+        assert "MQTT: Connected" in caplog.text
         assert mqc.connect_time != 0
+        assert cmock.async_subscribe.call_args_list == [call(HA_STATUS_TOPIC)]
 
         await mqc.wait_connected()
-        assert "MQTT: Connected" in caplog.text
         assert cmock.is_connected()
 
         await mqc.publish_discovery_info()
@@ -172,7 +183,7 @@ async def test_connect(caplog: pytest.LogCaptureFixture) -> None:
         ]
 
         await mqc.publish_discovery_info()
-        assert cmock.publish.call_count == 3
+        assert cmock.async_publish.call_count == 2
 
         pkg_version = importlib.metadata.version("mqtt-entity")
         disco_info = json.dumps(
@@ -184,8 +195,7 @@ async def test_connect(caplog: pytest.LogCaptureFixture) -> None:
             }
         )
 
-        assert cmock.publish.call_args_list == [
-            call("test/status", "online", retain=True),
+        assert cmock.async_publish.call_args_list == [
             call("homeassistant/device/test123/config", disco_info, 0, False),
             call("test/status", "online", 1, True),
         ]
@@ -194,7 +204,7 @@ async def test_connect(caplog: pytest.LogCaptureFixture) -> None:
 def _discovery_device_config_payloads(cmock: MagicMock) -> list[dict[str, object]]:
     """Decode JSON discovery configs published under homeassistant/device/.../config."""
     out: list[dict[str, object]] = []
-    for args, kwargs in cmock.publish.call_args_list:
+    for args, kwargs in cmock.async_publish.call_args_list:
         topic = args[0] if args else kwargs.get("topic")
         payload = args[1] if len(args) > 1 else kwargs.get("payload")
         if (
@@ -212,10 +222,8 @@ def _discovery_device_config_payloads(cmock: MagicMock) -> list[dict[str, object
 @pytest.mark.asyncio
 async def test_publish_discovery_merges_client_availability_topic() -> None:
     """Client ``availability_topic`` is merged into each device's discovery ``avty``."""
-    with patch("mqtt_entity.client.Client") as paho_client_class:
-        cmock = paho_client_class.return_value = MagicMock(
-            spec=Client(callback_api_version=CallbackAPIVersion.VERSION2)
-        )
+    with patch("mqtt_entity.client.AClient") as paho_client_class:
+        cmock = paho_client_class.return_value = _mock_paho_client()
         ok_seconds = time.time() + 0.3
 
         def is_connected() -> bool:
@@ -258,10 +266,8 @@ async def test_publish_discovery_merges_client_availability_topic() -> None:
 @pytest.mark.asyncio
 async def test_publish_discovery_availability_mode_all() -> None:
     """``availability_mode`` ``all`` is emitted when set (HA requires all topics online)."""
-    with patch("mqtt_entity.client.Client") as paho_client_class:
-        cmock = paho_client_class.return_value = MagicMock(
-            spec=Client(callback_api_version=CallbackAPIVersion.VERSION2)
-        )
+    with patch("mqtt_entity.client.AClient") as paho_client_class:
+        cmock = paho_client_class.return_value = _mock_paho_client()
         ok_seconds = time.time() + 0.3
 
         def is_connected() -> bool:
@@ -301,10 +307,8 @@ async def test_publish_discovery_availability_mode_all() -> None:
 @pytest.mark.asyncio
 async def test_publish_discovery_client_availability_topic_only() -> None:
     """With no per-device topics, discovery ``avty`` is only the client's availability topic."""
-    with patch("mqtt_entity.client.Client") as paho_client_class:
-        cmock = paho_client_class.return_value = MagicMock(
-            spec=Client(callback_api_version=CallbackAPIVersion.VERSION2)
-        )
+    with patch("mqtt_entity.client.AClient") as paho_client_class:
+        cmock = paho_client_class.return_value = _mock_paho_client()
         ok_seconds = time.time() + 0.3
 
         def is_connected() -> bool:
@@ -364,10 +368,8 @@ async def test_reconnect_after_broker_restart(caplog: pytest.LogCaptureFixture) 
     deadline expires), then paho auto-reconnect restores the connection.
     wait_connected() should grant a fresh window and succeed.
     """
-    with patch("mqtt_entity.client.Client") as paho_client_class:
-        cmock = paho_client_class.return_value = MagicMock(
-            spec=Client(callback_api_version=CallbackAPIVersion.VERSION2)
-        )
+    with patch("mqtt_entity.client.AClient") as paho_client_class:
+        cmock = paho_client_class.return_value = _mock_paho_client()
         mqc = MQTTClient(availability_topic="test/status")
 
         # Phase 1: initial connect succeeds immediately
@@ -396,19 +398,34 @@ async def test_reconnect_after_broker_restart(caplog: pytest.LogCaptureFixture) 
         assert "Connection lost. Waiting for reconnect" in caplog.text
 
 
+@pytest.mark.asyncio
+async def test_connect_reconnect_disconnects_previous_session() -> None:
+    """Reconnect tears down the previous socket before opening a new connection."""
+    with patch("mqtt_entity.client.AClient") as paho_client_class:
+        cmock = paho_client_class.return_value = _mock_paho_client()
+        mqc = MQTTClient()
+
+        cmock.is_connected.return_value = False
+        await mqc.connect(username="u", password="p", host="localhost")
+
+        cmock.is_connected.return_value = True
+        await mqc.connect(username="u", password="p", host="localhost")
+
+        cmock.disconnect.assert_called_once()
+
+
 def test_on_connect_snapshots_keys_for_resubscribe() -> None:
     """Test that _mqtt_on_connect is safe against concurrent topic changes.
 
     The keys() generator traverses MQTTMatcher2's internal tree. If
-    topic_subscribe()/topic_unsubscribe() runs concurrently (from the
-    asyncio thread), mutating the tree mid-iteration would crash with
+    topic_subscribe()/topic_unsubscribe() runs concurrently (from another
+    coroutine), mutating the tree mid-iteration would crash with
     RuntimeError. Using list() to snapshot prevents this.
     """
-    with patch("mqtt_entity.client.Client") as paho_client_class:
-        cmock = paho_client_class.return_value = MagicMock(
-            spec=Client(callback_api_version=CallbackAPIVersion.VERSION2)
-        )
+    with patch("mqtt_entity.client.AClient") as paho_client_class:
+        cmock = paho_client_class.return_value = _mock_paho_client()
         mqc = MQTTClient()
+        mqc._loop = asyncio.new_event_loop()
 
         # Pre-populate subscriptions
         mqc._on_message_filtered["topic/a"] = lambda p: None
@@ -416,18 +433,19 @@ def test_on_connect_snapshots_keys_for_resubscribe() -> None:
 
         subscribed: list[str] = []
 
-        def track_and_mutate(topic: str) -> None:
+        async def track_and_mutate(topic: str, qos: int = 0) -> None:
             """Track subscribes and mutate the tree mid-iteration."""
             subscribed.append(topic)
-            # Simulate concurrent topic_subscribe from asyncio thread —
+            # Simulate concurrent topic_subscribe from another coroutine —
             # this would crash a bare keys() generator
             if topic == "topic/a":
                 mqc._on_message_filtered["topic/c"] = lambda p: None
 
-        cmock.subscribe.side_effect = track_and_mutate
+        cmock.async_subscribe.side_effect = track_and_mutate
 
         # Should NOT raise RuntimeError: dictionary changed size during iteration
         mqc._mqtt_on_connect(cmock, None, None, 0)  # type: ignore[arg-type]
+        mqc._loop.run_until_complete(asyncio.sleep(0))
 
         assert "topic/a" in subscribed
         assert "topic/b" in subscribed
@@ -436,11 +454,9 @@ def test_on_connect_snapshots_keys_for_resubscribe() -> None:
 @pytest.mark.asyncio
 async def test_ha_status_topic(caplog: pytest.LogCaptureFixture) -> None:
     """Test connect."""
-    with patch("mqtt_entity.client.Client") as paho_client_class:  # patch paho Client
+    with patch("mqtt_entity.client.AClient") as paho_client_class:  # patch paho Client
         # return a mock when you instantiate
-        cmock = paho_client_class.return_value = MagicMock(
-            spec=Client(callback_api_version=CallbackAPIVersion.VERSION2)
-        )
+        cmock = paho_client_class.return_value = _mock_paho_client()
         mqc = MQTTClient(availability_topic="test/status")
 
         cmock.is_connected.return_value = True
@@ -449,7 +465,7 @@ async def test_ha_status_topic(caplog: pytest.LogCaptureFixture) -> None:
         assert HA_STATUS_TOPIC == "homeassistant/status"
 
         assert HA_STATUS_TOPIC not in mqc._on_message_filtered
-        mqc.monitor_homeassistant_status()
+        await mqc.monitor_homeassistant_status()
         assert HA_STATUS_TOPIC in mqc._on_message_filtered
 
         assert "MQTT: Home Assistant online" not in caplog.text
