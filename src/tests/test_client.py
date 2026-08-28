@@ -470,9 +470,7 @@ async def test_topic_subscribe_skips_broker_duplicate() -> None:
 
         cmock.async_subscribe.side_effect = slow_subscribe
 
-        sub_task = asyncio.create_task(
-            mqc.topic_subscribe(topic, lambda _p, _t: None)
-        )
+        sub_task = asyncio.create_task(mqc.topic_subscribe(topic, lambda _p, _t: None))
         await entered.wait()
         # Concurrent reconnect resubscribe while first SUBSCRIBE is in flight
         resub_task = asyncio.create_task(mqc._resubscribe_topics())
