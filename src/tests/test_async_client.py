@@ -2,11 +2,12 @@
 
 import asyncio
 import socket
+from typing import cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from mqtt_entity.client import MQTTAsyncClient
+from mqtt_entity.client import MQTTAsyncClient, ReasonCode
 
 
 @pytest.mark.asyncio
@@ -34,14 +35,14 @@ async def test_reconnect_cancelled_on_successful_connect() -> None:
     mqc._loop = asyncio.get_running_loop()
     mqc._reconnect_task = mqc._loop.create_task(asyncio.sleep(60))
 
-    mqc._mqtt_on_connect(mqc.client, None, MagicMock(), 0)
+    mqc._mqtt_on_connect(mqc.client, None, MagicMock(), cast(ReasonCode, 0))
 
     assert mqc._reconnect_task is None
 
 
 @pytest.mark.asyncio
 async def test_disconnect_disables_reconnect() -> None:
-    """disconnect prevents reconnect attempts after shutdown."""
+    """Disconnect prevents reconnect attempts after shutdown."""
     mqc = MQTTAsyncClient()
     loop = asyncio.get_running_loop()
     mqc._loop = loop
