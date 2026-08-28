@@ -4,6 +4,10 @@
 
 ### What's changed
 
+- Avoid double discovery publish from a subscribe race on `homeassistant/status`
+  (`topic_subscribe` vs `_resubscribe_topics`).
+
+
 | Before | After |
 | --- | --- |
 | `connect_async` + `loop_start()` | `async_start()` + `async_connect()` |
