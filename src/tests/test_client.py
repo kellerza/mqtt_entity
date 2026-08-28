@@ -484,6 +484,34 @@ async def test_topic_subscribe_skips_broker_duplicate() -> None:
 
 
 @pytest.mark.asyncio
+async def test_ha_online_dedupes_concurrent_status(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Concurrent retained homeassistant/status online only publishes discovery once."""
+    with patch("mqtt_entity.client.AClient") as paho_client_class:
+        cmock = paho_client_class.return_value = _mock_paho_client()
+        mqc = MQTTClient(availability_topic="test/status", clean_entities=0)
+        mqc.devs.append(MQTTDevice(identifiers=["inv1"], name="ss", components={}))
+        cmock.is_connected.return_value = True
+        mqc.connect_time = 1
+
+        await mqc.monitor_homeassistant_status()
+        online = mqc._on_message_filtered[HA_STATUS_TOPIC]
+
+        await asyncio.gather(online("online", ""), online("online", ""))
+
+        assert caplog.text.count("MQTT: Home Assistant online") == 1
+        assert cmock.async_publish.await_count >= 1
+        # device discovery + availability
+        disco_publishes = [
+            c
+            for c in cmock.async_publish.await_args_list
+            if c.args and str(c.args[0]).endswith("/config")
+        ]
+        assert len(disco_publishes) == 1
+
+
+@pytest.mark.asyncio
 async def test_ha_status_topic(caplog: pytest.LogCaptureFixture) -> None:
     """Test connect."""
     with patch("mqtt_entity.client.AClient") as paho_client_class:  # patch paho Client

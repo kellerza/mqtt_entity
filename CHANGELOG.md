@@ -6,6 +6,8 @@
 
 - Avoid double discovery publish from a subscribe race on `homeassistant/status`
   (`topic_subscribe` vs `_resubscribe_topics`).
+- Keep `_ha_online` across CONNACK so retained status redelivery after resubscribe
+  does not republish discovery; reset on disconnect / HA offline instead.
 
 | Before | After |
 | --- | --- |

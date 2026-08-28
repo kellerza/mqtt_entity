@@ -175,6 +175,7 @@ class MQTTAsyncClient:
         _properties: Properties | None = None,
     ) -> None:
         """MQTT on_disconnect callback."""
+        self._ha_online = False
         self._on_connection_lost()
 
     def _mqtt_on_connect(
@@ -195,7 +196,9 @@ class MQTTAsyncClient:
         # Broker drops subscriptions on a new session; clear before any
         # concurrent topic_subscribe() can race with _resubscribe_topics().
         self._broker_topics.clear()
-        self._ha_online = False
+        # Do not clear _ha_online here: a second CONNACK / resubscribe would
+        # redeliver retained homeassistant/status and republish discovery.
+        # Offline is tracked via the status topic (and disconnect below).
         # publish online (Last will sets offline on disconnect)
         if self.availability_topic:
             client.publish(self.availability_topic, "online", retain=True)
@@ -421,14 +424,17 @@ class MQTTClient(MQTTAsyncClient):
                 )
                 return
             timeout.cancel()
-            if self._ha_online:
-                return
-            self._ha_online = True
-            _LOG.info(
-                "MQTT: Home Assistant online. Publish discovery info for %s",
-                [d.name for d in self.devs],
-            )
-            await self.publish_discovery_info()
+            # Check+set under the discovery lock so concurrent retained
+            # redeliveries cannot both pass a unlocked _ha_online guard.
+            async with self._discovery_lock:
+                if self._ha_online:
+                    return
+                self._ha_online = True
+                _LOG.info(
+                    "MQTT: Home Assistant online. Publish discovery info for %s",
+                    [d.name for d in self.devs],
+                )
+                await self._publish_discovery_info_locked()
 
         await self.topic_subscribe(HA_STATUS_TOPIC, _online_cb)
         if self.connect_time == 0:
