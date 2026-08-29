@@ -36,7 +36,10 @@ MQTT_EXPLORER_LIMIT = 20000
 _RECONNECT_INTERVAL_SECONDS = 10
 _DISCOVERY_INTERVAL_SECONDS = 5
 
-type TopicCallback = Callable[[str, str], Coroutine[Any, Any, None]]
+type TopicCallback = (
+    Callable[[str, str], Coroutine[Any, Any, None]]
+    | Callable[[str], Coroutine[Any, Any, None]]
+)
 
 
 @dataclass()
