@@ -64,21 +64,16 @@ async def test_mqtt_server() -> None:
         availability_topic="test/available",
         origin_name="Test Origin",
     )
-    loop = asyncio.get_running_loop()
-    tasks = list[asyncio.Task]()
 
     async def select_select(msg: str, _: str) -> None:
         _LOG.error("onchange start: %s", msg)
         await sense_ent.send_state(mqc, f"select 1={msg} --> 2")
         await select_ent2.send_state(mqc, msg)
 
-    def select_select2(msg: str, _: str) -> None:
-        _LOG.error("onchange no async: %s", msg)
-        nonlocal tasks
-        tasks = [
-            loop.create_task(sense_ent.send_state(mqc, f"select 2={msg} --> 1")),
-            loop.create_task(select_ent.send_state(mqc, msg)),
-        ]
+    async def select_select2(msg: str, _: str) -> None:
+        _LOG.error("onchange: %s", msg)
+        await sense_ent.send_state(mqc, f"select 2={msg} --> 1")
+        await select_ent.send_state(mqc, msg)
 
     select_ent.on_command = select_select
     select_ent2.on_command = select_select2
@@ -454,6 +449,27 @@ def test_on_connect_snapshots_keys_for_resubscribe() -> None:
 
 
 @pytest.mark.asyncio
+async def test_mqtt_on_message_runs_async_callback() -> None:
+    """Incoming MQTT messages are dispatched to async topic callbacks."""
+    with patch("mqtt_entity.client.AClient") as paho_client_class:
+        paho_client_class.return_value = _mock_paho_client()
+        mqc = MQTTClient()
+        mqc._loop = asyncio.get_running_loop()
+        seen: list[tuple[str, str]] = []
+
+        async def on_cmd(payload: str, topic: str) -> None:
+            seen.append((payload, topic))
+
+        mqc._on_message_filtered["cmd"] = on_cmd
+        msg = MagicMock()
+        msg.topic = "cmd"
+        msg.payload = b"ON"
+        mqc._mqtt_on_message(mqc.client, None, msg)
+        await asyncio.sleep(0)
+        assert seen == [("ON", "cmd")]
+
+
+@pytest.mark.asyncio
 async def test_topic_subscribe_skips_broker_duplicate() -> None:
     """topic_subscribe + concurrent _resubscribe_topics SUBSCRIBEs once."""
     with patch("mqtt_entity.client.AClient") as paho_client_class:
@@ -472,7 +488,10 @@ async def test_topic_subscribe_skips_broker_duplicate() -> None:
 
         cmock.async_subscribe.side_effect = slow_subscribe
 
-        sub_task = asyncio.create_task(mqc.topic_subscribe(topic, lambda _p, _t: None))
+        async def noop(_p: str, _t: str) -> None:
+            return
+
+        sub_task = asyncio.create_task(mqc.topic_subscribe(topic, noop))
         await entered.wait()
         # Concurrent reconnect resubscribe while first SUBSCRIBE is in flight
         resub_task = asyncio.create_task(mqc._resubscribe_topics())

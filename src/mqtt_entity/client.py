@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import hashlib
 import importlib.metadata
 import inspect
 import logging
@@ -37,10 +36,7 @@ MQTT_EXPLORER_LIMIT = 20000
 _RECONNECT_INTERVAL_SECONDS = 10
 _DISCOVERY_INTERVAL_SECONDS = 5
 
-type SyncCallback = Callable[[str, str], None]
-type AsyncCallback = Callable[[str, str], Coroutine[Any, Any, None]]
-
-type TopicCallback = SyncCallback | AsyncCallback
+type TopicCallback = Callable[[str, str], Coroutine[Any, Any, None]]
 
 
 @dataclass()
@@ -264,13 +260,10 @@ class MQTTAsyncClient:
             "MQTT: Publish %s%s %s, %s", qos, "R" if retain else "", topic, payload
         )
         if payload and len(payload) > MQTT_EXPLORER_LIMIT:
-            # ponytail: short hash to spot identical oversized payloads in logs
-            digest = hashlib.blake2b(payload.encode(), digest_size=4).hexdigest()
             _LOG.info(
-                "MQTT: Payload >%s: %s hash=%s (MQTTExplorer will truncate the message)",
+                "MQTT: Payload >%s: %s (MQTTExplorer will truncate the message)",
                 MQTT_EXPLORER_LIMIT,
                 len(payload),
-                digest,
             )
         return (topic, payload, qos, bool(retain))
 
@@ -315,54 +308,24 @@ class MQTTAsyncClient:
             _LOG.warning("MQTT: received empty topic, payload: %s", payload)
             return
 
-        # split sync & async callbacks
-        sync_cbs = list[tuple[SyncCallback, tuple[str, ...]]]()
-        async_cbs = list[tuple[AsyncCallback, tuple[str, ...]]]()
+        matched = list[tuple[TopicCallback, tuple[str, ...]]]()
         for cb in self._on_message_filtered.iter_match(topic):
             cnt = len(inspect.signature(cb).parameters)
             args: tuple[str, ...] = (payload,) if cnt == 1 else (payload, message.topic)
-            if inspect.iscoroutinefunction(cb):
-                async_cbs.append((cb, args))
-                continue
-            else:
-                sync_cbs.append((cast(SyncCallback, cb), args))
+            matched.append((cb, args))
 
-        if not sync_cbs and not async_cbs:
+        if not matched:
             _LOG.warning(
                 "MQTT: Unhandled msg received. Topic %s with payload %s", topic, payload
             )
-            return None
-
-        _LOG.debug(
-            "MQTT: topic %s, async callbacks: %s, sync callbacks: %s",
-            topic,
-            [c[0].__name__ for c in async_cbs],
-            [c[0].__name__ for c in sync_cbs],
-        )
-
-        for cb, args in sync_cbs:
-            name = cb.__name__
-            try:
-                _LOG.debug("MQTT: Callback %s(%s, topic=%s)", name, payload, topic)
-                cb(*args)
-            except Exception as err:
-                _LOG.error(
-                    "MQTT: Exception in callback %s(topic=%s): %s", name, topic, err
-                )
-                if not self.suppress_exceptions:
-                    raise
-
-        if not async_cbs:
             return
 
-        async def cbs() -> None:
-            """Run async callbacks."""
-            for cb, args in async_cbs:
+        async def run() -> None:
+            """Dispatch topic callbacks."""
+            for cb, args in matched:
                 name = cb.__name__
                 try:
-                    _LOG.debug(
-                        "MQTT: Callback async %s(%s, topic=%s)", name, payload, topic
-                    )
+                    _LOG.debug("MQTT: Callback %s(%s, topic=%s)", name, payload, topic)
                     await cb(*args)
                 except Exception as err:
                     _LOG.error(
@@ -371,7 +334,7 @@ class MQTTAsyncClient:
                     if not self.suppress_exceptions:
                         raise
 
-        self._loop.create_task(cbs())
+        self._loop.create_task(run())
 
 
 @dataclass()
