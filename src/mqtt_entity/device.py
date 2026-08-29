@@ -1,12 +1,16 @@
 """HASS MQTT Device, used for device based discovery."""
 
+import time
 from collections.abc import Iterable
 from dataclasses import dataclass, field
+from json import dumps
 from typing import Any, Literal
 
 from .entities import MQTTBaseEntity
 from .helpers import DEVREG_ABBREVIATE, ORIGIN_ABBREVIATE, as_dict, hass_abbreviate
 from .utils import slug
+
+_DISCOVERY_DEBOUNCE_S = 5.0
 
 
 def unique_str(topics: Iterable[str]) -> list[str]:
@@ -74,6 +78,11 @@ class MQTTDevice:
     availability_mode: AvailabilityMode = ""
     """When several availability topics are used: ``all``, ``any``, or ``latest`` (HA default if omitted)."""
 
+    _discovery_cache: tuple[str, str] | None = field(
+        default=None, repr=False, compare=False
+    )
+    _discovery_flag_at: float | None = field(default=None, repr=False, compare=False)
+
     def __post_init__(self) -> None:
         """Post init."""
         if not self.identifiers:
@@ -91,17 +100,35 @@ class MQTTDevice:
         _id = self.identifiers[0]
         return slug(str(_id[1] if isinstance(_id, tuple) else _id))
 
+    def flag_discovery(self) -> None:
+        """Mark discovery as possibly stale.
+
+        The memo is dropped after a short debounce so rapid entity rebuilds
+        batch into one ``discovery_info()`` rebuild.
+        """
+        self._discovery_flag_at = time.monotonic() + _DISCOVERY_DEBOUNCE_S
+
     def discovery_info(
         self,
         *,
         availability_topic: str = "",
         origin: MQTTOrigin,
-    ) -> tuple[str, dict[str, Any]]:
-        """Return the discovery dictionary for the MQTT device.
+    ) -> tuple[str, str]:
+        """Return topic and compact JSON payload (memoized).
 
-        An optional ``availability_topic`` will be added to the device's
-        :attr:`availability_topics`.
+        Call :meth:`flag_discovery` after mutating components. ``availability_topic``
+        and ``origin`` are not part of the cache key; they must stay stable (or
+        flag after they change).
         """
+        if (
+            self._discovery_flag_at is not None
+            and time.monotonic() >= self._discovery_flag_at
+        ):
+            self._discovery_cache = None
+            self._discovery_flag_at = None
+        if self._discovery_cache is not None:
+            return self._discovery_cache
+
         cmps = {
             k: hass_abbreviate(v.as_discovery_dict) for k, v in self.components.items()
         }
@@ -128,4 +155,7 @@ class MQTTDevice:
 
         disco_json["cmps"] = cmps
 
-        return f"homeassistant/device/{self.id}/config", disco_json
+        topic = f"homeassistant/device/{self.id}/config"
+        payload = dumps(disco_json, indent=None, separators=(",", ":"))
+        self._discovery_cache = (topic, payload)
+        return self._discovery_cache

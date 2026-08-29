@@ -4,6 +4,9 @@
 
 ### What's changed
 
+- Cache ``MQTTDevice.discovery_info`` as ``(topic, payload)``; ``flag_discovery()`` invalidates after a 5s debounce.
+  The HA-online client loop republishes only when the compact JSON payload changes.
+  Cache clears on HA offline / MQTT disconnect so a real restart still rediscovers.
 - Avoid double discovery publish from a subscribe race on `homeassistant/status`
   (`topic_subscribe` vs `_resubscribe_topics`).
 - Keep `_ha_online` across CONNACK so retained status redelivery after resubscribe

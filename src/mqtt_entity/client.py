@@ -35,6 +35,7 @@ HA_STATUS_TOPIC = "homeassistant/status"
 _LOG = logging.getLogger(__name__)
 MQTT_EXPLORER_LIMIT = 20000
 _RECONNECT_INTERVAL_SECONDS = 10
+_DISCOVERY_INTERVAL_SECONDS = 5
 
 type SyncCallback = Callable[[str, str], None]
 type AsyncCallback = Callable[[str, str], Coroutine[Any, Any, None]]
@@ -395,6 +396,58 @@ class MQTTClient(MQTTAsyncClient):
         repr=False,
     )
     _discovery_lock: asyncio.Lock = field(default_factory=asyncio.Lock, repr=False)
+    _discovery_task: asyncio.Task[None] | None = field(default=None, repr=False)
+    _last_discovery: dict[str, str] = field(default_factory=dict, repr=False)
+    """Last published discovery payload per topic."""
+
+    def _mqtt_on_disconnect(
+        self,
+        _client: AClient,
+        _userdata: Any,
+        _disconnect_flags: DisconnectFlags,
+        _reason_code: ReasonCode,
+        _properties: Properties | None = None,
+    ) -> None:
+        """MQTT on_disconnect callback."""
+        self._cancel_discovery_loop()
+        self._last_discovery.clear()
+        super()._mqtt_on_disconnect(
+            _client, _userdata, _disconnect_flags, _reason_code, _properties
+        )
+
+    async def disconnect(self) -> None:
+        """Stop the MQTT client."""
+        self._cancel_discovery_loop()
+        await super().disconnect()
+
+    def _cancel_discovery_loop(self) -> None:
+        """Stop the HA-online discovery poll."""
+        if self._discovery_task is None:
+            return
+        self._discovery_task.cancel()
+        self._discovery_task = None
+
+    def _start_discovery_loop(self) -> None:
+        """Poll for changed discovery while Home Assistant is online."""
+        if self._discovery_task is not None and not self._discovery_task.done():
+            return
+        self._discovery_task = asyncio.get_running_loop().create_task(
+            self._discovery_loop()
+        )
+
+    async def _discovery_loop(self) -> None:
+        """Republish discovery when a device payload changes."""
+        try:
+            while self._ha_online:
+                await asyncio.sleep(_DISCOVERY_INTERVAL_SECONDS)
+                if not self._ha_online:
+                    return
+                async with self._discovery_lock:
+                    await self._publish_device_config()
+        except asyncio.CancelledError:
+            return
+        finally:
+            self._discovery_task = None
 
     async def monitor_homeassistant_status(self) -> None:
         """Monitor homeassistant/status & publish discovery info."""
@@ -423,6 +476,8 @@ class MQTTClient(MQTTAsyncClient):
             """Republish discovery info."""
             if payload_s != "online":
                 self._ha_online = False
+                self._cancel_discovery_loop()
+                self._last_discovery.clear()
                 _LOG.warning(
                     "MQTT: Home Assistant offline. %s = %s", HA_STATUS_TOPIC, payload_s
                 )
@@ -439,6 +494,7 @@ class MQTTClient(MQTTAsyncClient):
                     [d.name for d in self.devs],
                 )
                 await self._publish_discovery_info_locked()
+                self._start_discovery_loop()
 
         await self.topic_subscribe(HA_STATUS_TOPIC, _online_cb)
         if self.connect_time == 0:
@@ -448,6 +504,36 @@ class MQTTClient(MQTTAsyncClient):
         """Publish discovery info immediately."""
         async with self._discovery_lock:
             await self._publish_discovery_info_locked()
+
+    async def _subscribe_device_commands(self, ddev: MQTTDevice) -> None:
+        tcb = dict[str, TopicCallback]()
+        for ent in ddev.components.values():
+            tcb.update(ent.topic_callbacks)
+        for topic, cbk in tcb.items():
+            await self.topic_subscribe(topic, cbk)
+
+    async def _publish_device_config(self) -> None:
+        """Publish discovery for each device, skipping unchanged payloads."""
+        origin = MQTTOrigin(
+            name=self.origin_name,
+            sw=self.origin_version,
+            url=self.origin_url,
+        )
+        for ddev in self.devs:
+            disco_topic, disco_payload = ddev.discovery_info(
+                availability_topic=self.availability_topic,
+                origin=origin,
+            )
+            if self._last_discovery.get(disco_topic) == disco_payload:
+                _LOG.debug("MQTT: Skip unchanged discovery %s", disco_topic)
+            else:
+                self._last_discovery[disco_topic] = disco_payload
+                try:
+                    await self.publish(disco_topic, disco_payload)
+                except Exception:
+                    self._last_discovery.pop(disco_topic)
+                    raise
+            await self._subscribe_device_commands(ddev)
 
     async def _publish_discovery_info_locked(self) -> None:
         """Publish discovery info (caller holds ``_discovery_lock``)."""
@@ -459,27 +545,7 @@ class MQTTClient(MQTTAsyncClient):
             await self._clean_entity_based_discovery()
             await asyncio.sleep(1)
 
-        for ddev in self.devs:
-            disco_topic, disco_dict = ddev.discovery_info(
-                availability_topic=self.availability_topic,
-                origin=MQTTOrigin(
-                    name=self.origin_name,
-                    sw=self.origin_version,
-                    url=self.origin_url,
-                ),
-            )
-            disco_payload = dumps(disco_dict)
-            if len(disco_payload) > MQTT_EXPLORER_LIMIT:
-                disco_payload = dumps(disco_dict, indent=None, separators=(",", ":"))
-            await self.publish(disco_topic, disco_payload)
-
-            # add topic callbacks
-            tcb: dict[str, TopicCallback] = {}
-            tcb = dict[str, TopicCallback]()
-            for ent in ddev.components.values():
-                tcb.update(ent.topic_callbacks)
-            for topic, cbk in tcb.items():
-                await self.topic_subscribe(topic, cbk)
+        await self._publish_device_config()
 
         await self.publish_availability(self.availability_topic, True, retain=True)
         if self.on_ha_connected:

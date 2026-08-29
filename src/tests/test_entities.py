@@ -1,5 +1,6 @@
 """Test entities."""
 
+from json import loads
 from unittest.mock import AsyncMock
 
 import pytest
@@ -58,11 +59,12 @@ def test_mqtt_entity() -> None:
 
     dev = MQTTDevice(identifiers=[("serial", "123")], components={"789": ent})
     origin = MQTTOrigin(name="Test Origin")
-    d_topic, d_dict = dev.discovery_info(availability_topic="/blah", origin=origin)
+    d_topic, d_payload = dev.discovery_info(availability_topic="/blah", origin=origin)
+    d_dict = loads(d_payload)
 
     assert d_topic == "homeassistant/device/123/config"
     assert d_dict == {
-        "dev": {"ids": [("serial", "123")]},
+        "dev": {"ids": [["serial", "123"]]},
         "o": {"name": "Test Origin"},
         "avty": {"topic": "/blah"},
         "cmps": {
@@ -74,6 +76,24 @@ def test_mqtt_entity() -> None:
             }
         },
     }
+
+
+def test_discovery_info_memo_and_flag(monkeypatch: pytest.MonkeyPatch) -> None:
+    """discovery_info is memoized until flag_discovery debounce expires."""
+    now = [100.0]
+    monkeypatch.setattr("mqtt_entity.device.time.monotonic", lambda: now[0])
+    origin = MQTTOrigin(name="O")
+    ent = MQTTSensorEntity(name="a", unique_id="1", state_topic="/a")
+    ent2 = MQTTSensorEntity(name="b", unique_id="2", state_topic="/b")
+    dev = MQTTDevice(identifiers=["d"], components={"1": ent})
+    _t, p1 = dev.discovery_info(origin=origin)
+    assert dev.discovery_info(origin=origin)[1] == p1
+    dev.components["2"] = ent2
+    assert dev.discovery_info(origin=origin)[1] == p1
+    dev.flag_discovery()
+    assert dev.discovery_info(origin=origin)[1] == p1
+    now[0] += 6
+    assert dev.discovery_info(origin=origin)[1] != p1
 
 
 def test_discovery_extra() -> None:
@@ -88,11 +108,12 @@ def test_discovery_extra() -> None:
 
     dev = MQTTDevice(identifiers=[("serial", "123")], components={"789": ent})
     origin = MQTTOrigin(name="Test Origin")
-    d_topic, d_dict = dev.discovery_info(availability_topic="/blah", origin=origin)
+    d_topic, d_payload = dev.discovery_info(availability_topic="/blah", origin=origin)
+    d_dict = loads(d_payload)
 
     assert d_topic == "homeassistant/device/123/config"
     assert d_dict == {
-        "dev": {"ids": [("serial", "123")]},
+        "dev": {"ids": [["serial", "123"]]},
         "o": {"name": "Test Origin"},
         "avty": {"topic": "/blah"},
         "cmps": {
@@ -125,14 +146,15 @@ def test_device_trigger() -> None:
         components={"trigger1": trig},
     )
     origin = MQTTOrigin(name="Test Origin")
-    d_topic, d_dict = dev.discovery_info(availability_topic="/blah", origin=origin)
+    d_topic, d_payload = dev.discovery_info(availability_topic="/blah", origin=origin)
+    d_dict = loads(d_payload)
 
     assert d_topic == "homeassistant/device/123/config"
     assert d_dict == {
         "dev": {
             "ids": [
-                ("serial", "123"),
-                ("serial", "456"),
+                ["serial", "123"],
+                ["serial", "456"],
             ],
         },
         "o": {
@@ -171,10 +193,11 @@ def test_mqtt_device_discovery_registry_fields() -> None:
         qos=1,
     )
     origin = MQTTOrigin(name="Origin")
-    _topic, d_dict = dev.discovery_info(availability_topic="/av", origin=origin)
+    _topic, d_payload = dev.discovery_info(availability_topic="/av", origin=origin)
+    d_dict = loads(d_payload)
 
-    assert d_dict["dev"]["ids"] == [("serial", "dev1")]
-    assert d_dict["dev"]["cns"] == [("mac", "02:aa:bb:cc:dd:01")]
+    assert d_dict["dev"]["ids"] == [["serial", "dev1"]]
+    assert d_dict["dev"]["cns"] == [["mac", "02:aa:bb:cc:dd:01"]]
     assert d_dict["dev"]["hw"] == "1.0"
     assert d_dict["dev"]["mdl_id"] == "SKU-1"
     assert d_dict["dev"]["sn"] == "SN-99"
@@ -191,7 +214,8 @@ def test_mqtt_device_discovery_multi_availability_mode() -> None:
         components={"c1": ent},
         availability_topics=["t1", "t2"],
     )
-    _, d0 = dev_default.discovery_info(origin=origin)
+    _, d0_payload = dev_default.discovery_info(origin=origin)
+    d0 = loads(d0_payload)
     assert d0["avty"] == [{"topic": "t1"}, {"topic": "t2"}]
     assert "avty_mode" not in d0
 
@@ -201,7 +225,8 @@ def test_mqtt_device_discovery_multi_availability_mode() -> None:
         availability_topics=["t1", "t2"],
         availability_mode="any",
     )
-    _, d1 = dev_any.discovery_info(origin=origin)
+    _, d1_payload = dev_any.discovery_info(origin=origin)
+    d1 = loads(d1_payload)
     assert d1["avty_mode"] == "any"
 
 

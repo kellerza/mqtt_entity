@@ -192,7 +192,9 @@ async def test_connect(caplog: pytest.LogCaptureFixture) -> None:
                 "o": {"name": "mqtt-entity", "sw": pkg_version},
                 "avty": {"topic": "test/status"},
                 "cmps": {},
-            }
+            },
+            indent=None,
+            separators=(",", ":"),
         )
 
         assert cmock.async_publish.call_args_list == [
@@ -509,6 +511,51 @@ async def test_ha_online_dedupes_concurrent_status(
             if c.args and str(c.args[0]).endswith("/config")
         ]
         assert len(disco_publishes) == 1
+        mqc._cancel_discovery_loop()
+
+
+@pytest.mark.asyncio
+async def test_publish_discovery_skips_unchanged_payload(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """HA online + immediate publish_discovery_info must not republish same config."""
+    with patch("mqtt_entity.client.AClient") as paho_client_class:
+        cmock = paho_client_class.return_value = _mock_paho_client()
+        mqc = MQTTClient(availability_topic="test/status", clean_entities=0)
+        mqc.devs.append(MQTTDevice(identifiers=["inv1"], name="ss", components={}))
+        cmock.is_connected.return_value = True
+        mqc.connect_time = 1
+
+        await mqc.monitor_homeassistant_status()
+        await mqc._on_message_filtered[HA_STATUS_TOPIC]("online", "")
+        await mqc.publish_discovery_info()
+
+        disco_publishes = [
+            c
+            for c in cmock.async_publish.await_args_list
+            if c.args and str(c.args[0]).endswith("/config")
+        ]
+        assert len(disco_publishes) == 1
+        assert "Skip unchanged discovery" in caplog.text
+
+        await mqc._publish_device_config()
+        disco_publishes = [
+            c
+            for c in cmock.async_publish.await_args_list
+            if c.args and str(c.args[0]).endswith("/config")
+        ]
+        assert len(disco_publishes) == 1
+
+        # HA offline clears cache; next online must publish again
+        await mqc._on_message_filtered[HA_STATUS_TOPIC]("offline", "")
+        await mqc._on_message_filtered[HA_STATUS_TOPIC]("online", "")
+        disco_publishes = [
+            c
+            for c in cmock.async_publish.await_args_list
+            if c.args and str(c.args[0]).endswith("/config")
+        ]
+        assert len(disco_publishes) == 2
+        mqc._cancel_discovery_loop()
 
 
 @pytest.mark.asyncio
@@ -533,3 +580,4 @@ async def test_ha_status_topic(caplog: pytest.LogCaptureFixture) -> None:
         assert "MQTT: Home Assistant online" in caplog.text
         await asyncio.sleep(0.1)
         assert "Timeout waiting for Home Assistant" not in caplog.text
+        mqc._cancel_discovery_loop()
