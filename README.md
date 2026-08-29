@@ -1,6 +1,6 @@
 # MQTT Entity helper library for Home Assistant
 
-[![Workflow Status](https://github.com/kellerza/mqtt_entity/actions/workflows/main.yml/badge.svg?branch=master)](https://github.com/kellerza/mqtt_entity/actions)
+[![Workflow Status](https://github.com/kellerza/mqtt_entity/actions/workflows/main.yml/badge.svg)](https://github.com/kellerza/mqtt_entity/actions/workflows/main.yml)
 [![codecov](https://codecov.io/gh/kellerza/mqtt_entity/branch/main/graph/badge.svg?token=PG4N1YBUGW)](https://codecov.io/gh/kellerza/mqtt_entity)
 
 A Python helper library to manage Home Assistant entities over MQTT.

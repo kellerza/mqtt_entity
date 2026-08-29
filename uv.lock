@@ -431,9 +431,9 @@ dev = [
     { name = "pytest-cov" },
     { name = "pytest-env" },
     { name = "pytest-github-actions-annotate-failures" },
-    { name = "rumdl", specifier = ">=0.2.9" },
+    { name = "rumdl" },
     { name = "types-pyyaml" },
-    { name = "zuban", specifier = ">=0.5.1" },
+    { name = "zuban" },
 ]
 
 [[package]]

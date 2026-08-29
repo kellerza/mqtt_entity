@@ -42,13 +42,13 @@ dev = [
   "pytest-cov",
   "pytest-env",
   "pytest-github-actions-annotate-failures",
-  "rumdl>=0.2.9",
+  "rumdl",
   "types-pyyaml",
-  "zuban>=0.5.1",
+  "zuban",
 ]
 
 [tool.uv]
-build-backend.source-exclude = [ "src/tests" ]
+build-backend.wheel-exclude = [ "src/tests" ]
 
 [tool.ruff]
 target-version = "py312"

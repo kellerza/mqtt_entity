@@ -1,4 +1,0 @@
-include LICENSE README.md src/mqtt_entity/py.typed
-graft src/mqtt_entity
-graft tests
-recursive-exclude * *.py[co]
