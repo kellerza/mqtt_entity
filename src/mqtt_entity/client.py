@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import importlib.metadata
 import inspect
 import logging
@@ -262,10 +263,13 @@ class MQTTAsyncClient:
             "MQTT: Publish %s%s %s, %s", qos, "R" if retain else "", topic, payload
         )
         if payload and len(payload) > MQTT_EXPLORER_LIMIT:
+            # ponytail: short hash to spot identical oversized payloads in logs
+            digest = hashlib.blake2b(payload.encode(), digest_size=4).hexdigest()
             _LOG.info(
-                "MQTT: Payload >%s: %s (MQTTExplorer will truncate the message)",
+                "MQTT: Payload >%s: %s hash=%s (MQTTExplorer will truncate the message)",
                 MQTT_EXPLORER_LIMIT,
                 len(payload),
+                digest,
             )
         return (topic, payload, qos, bool(retain))
 
