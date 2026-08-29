@@ -60,6 +60,10 @@ class MQTTAsyncClient:
     _connect_host: str = field(init=False, repr=False)
     _connect_port: int = field(init=False, repr=False)
     _connect_keepalive: int = field(init=False, repr=False)
+    _subscribe_lock: asyncio.Lock = field(default_factory=asyncio.Lock, repr=False)
+    _broker_topics: set[str] = field(default_factory=set, repr=False)
+    """Topics successfully SUBSCRIBEd on the current broker connection."""
+    _ha_online: bool = field(default=False, repr=False)
 
     def __post_init__(self) -> None:
         """Init."""
@@ -171,6 +175,7 @@ class MQTTAsyncClient:
         _properties: Properties | None = None,
     ) -> None:
         """MQTT on_disconnect callback."""
+        self._ha_online = False
         self._on_connection_lost()
 
     def _mqtt_on_connect(
@@ -188,6 +193,12 @@ class MQTTAsyncClient:
             return
         self._cancel_reconnect()
         _LOG.info("MQTT: Connected")
+        # Broker drops subscriptions on a new session; clear before any
+        # concurrent topic_subscribe() can race with _resubscribe_topics().
+        self._broker_topics.clear()
+        # Do not clear _ha_online here: a second CONNACK / resubscribe would
+        # redeliver retained homeassistant/status and republish discovery.
+        # Offline is tracked via the status topic (and disconnect below).
         # publish online (Last will sets offline on disconnect)
         if self.availability_topic:
             client.publish(self.availability_topic, "online", retain=True)
@@ -228,8 +239,14 @@ class MQTTAsyncClient:
     async def _resubscribe_topics(self) -> None:
         """Re-subscribe all registered topics after connect/reconnect."""
         # Snapshot keys to avoid RuntimeError from concurrent modification.
-        for topic in list(self._on_message_filtered.keys()):
-            await self.client.async_subscribe(topic)
+        # Skip topics already SUBSCRIBEd by a concurrent topic_subscribe() so
+        # retained messages (e.g. homeassistant/status) are not delivered twice.
+        async with self._subscribe_lock:
+            for topic in list(self._on_message_filtered.keys()):
+                if topic in self._broker_topics:
+                    continue
+                await self.client.async_subscribe(topic)
+                self._broker_topics.add(topic)
 
     def publish_args(
         self, topic: str, payload: str | None, qos: int, retain: bool
@@ -267,7 +284,9 @@ class MQTTAsyncClient:
     async def topic_unsubscribe(self, topic: str) -> None:
         """Remove a topic from the topic callbacks."""
         await self.wait_connected()
-        await self.client.async_unsubscribe(topic)
+        async with self._subscribe_lock:
+            await self.client.async_unsubscribe(topic)
+            self._broker_topics.discard(topic)
         self._on_message_filtered.pop(topic)
 
     async def topic_subscribe(self, topic: str, callback: TopicCallback) -> None:
@@ -275,7 +294,11 @@ class MQTTAsyncClient:
         _LOG.debug("MQTT: Add callback for topic %s", topic)
         self._on_message_filtered[topic] = callback
         await self.wait_connected()
-        await self.client.async_subscribe(topic)
+        async with self._subscribe_lock:
+            if topic in self._broker_topics:
+                return
+            await self.client.async_subscribe(topic)
+            self._broker_topics.add(topic)
 
     def _mqtt_on_message(
         self, client: AClient, userdata: Any, message: MQTTMessage
@@ -367,6 +390,7 @@ class MQTTClient(MQTTAsyncClient):
         default=None,
         repr=False,
     )
+    _discovery_lock: asyncio.Lock = field(default_factory=asyncio.Lock, repr=False)
 
     async def monitor_homeassistant_status(self) -> None:
         """Monitor homeassistant/status & publish discovery info."""
@@ -394,16 +418,23 @@ class MQTTClient(MQTTAsyncClient):
         async def _online_cb(payload_s: str, _: str) -> None:
             """Republish discovery info."""
             if payload_s != "online":
+                self._ha_online = False
                 _LOG.warning(
                     "MQTT: Home Assistant offline. %s = %s", HA_STATUS_TOPIC, payload_s
                 )
                 return
             timeout.cancel()
-            _LOG.info(
-                "MQTT: Home Assistant online. Publish discovery info for %s",
-                [d.name for d in self.devs],
-            )
-            await self.publish_discovery_info()
+            # Check+set under the discovery lock so concurrent retained
+            # redeliveries cannot both pass a unlocked _ha_online guard.
+            async with self._discovery_lock:
+                if self._ha_online:
+                    return
+                self._ha_online = True
+                _LOG.info(
+                    "MQTT: Home Assistant online. Publish discovery info for %s",
+                    [d.name for d in self.devs],
+                )
+                await self._publish_discovery_info_locked()
 
         await self.topic_subscribe(HA_STATUS_TOPIC, _online_cb)
         if self.connect_time == 0:
@@ -411,6 +442,11 @@ class MQTTClient(MQTTAsyncClient):
 
     async def publish_discovery_info(self) -> None:
         """Publish discovery info immediately."""
+        async with self._discovery_lock:
+            await self._publish_discovery_info_locked()
+
+    async def _publish_discovery_info_locked(self) -> None:
+        """Publish discovery info (caller holds ``_discovery_lock``)."""
         if not self.devs:
             _LOG.warning("MQTT: No devices to publish discovery info for")
             return

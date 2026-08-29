@@ -452,6 +452,66 @@ def test_on_connect_snapshots_keys_for_resubscribe() -> None:
 
 
 @pytest.mark.asyncio
+async def test_topic_subscribe_skips_broker_duplicate() -> None:
+    """topic_subscribe + concurrent _resubscribe_topics SUBSCRIBEs once."""
+    with patch("mqtt_entity.client.AClient") as paho_client_class:
+        cmock = paho_client_class.return_value = _mock_paho_client()
+        mqc = MQTTClient()
+        cmock.is_connected.return_value = True
+        mqc.connect_time = 1
+
+        topic = "homeassistant/status"
+        gate = asyncio.Event()
+        entered = asyncio.Event()
+
+        async def slow_subscribe(t: str, qos: int = 0) -> None:
+            entered.set()
+            await gate.wait()
+
+        cmock.async_subscribe.side_effect = slow_subscribe
+
+        sub_task = asyncio.create_task(mqc.topic_subscribe(topic, lambda _p, _t: None))
+        await entered.wait()
+        # Concurrent reconnect resubscribe while first SUBSCRIBE is in flight
+        resub_task = asyncio.create_task(mqc._resubscribe_topics())
+        await asyncio.sleep(0)
+        gate.set()
+        await asyncio.gather(sub_task, resub_task)
+
+        assert cmock.async_subscribe.await_count == 1
+        assert cmock.async_subscribe.await_args_list == [call(topic)]
+        assert topic in mqc._broker_topics
+
+
+@pytest.mark.asyncio
+async def test_ha_online_dedupes_concurrent_status(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Concurrent retained homeassistant/status online only publishes discovery once."""
+    with patch("mqtt_entity.client.AClient") as paho_client_class:
+        cmock = paho_client_class.return_value = _mock_paho_client()
+        mqc = MQTTClient(availability_topic="test/status", clean_entities=0)
+        mqc.devs.append(MQTTDevice(identifiers=["inv1"], name="ss", components={}))
+        cmock.is_connected.return_value = True
+        mqc.connect_time = 1
+
+        await mqc.monitor_homeassistant_status()
+        online = mqc._on_message_filtered[HA_STATUS_TOPIC]
+
+        await asyncio.gather(online("online", ""), online("online", ""))
+
+        assert caplog.text.count("MQTT: Home Assistant online") == 1
+        assert cmock.async_publish.await_count >= 1
+        # device discovery + availability
+        disco_publishes = [
+            c
+            for c in cmock.async_publish.await_args_list
+            if c.args and str(c.args[0]).endswith("/config")
+        ]
+        assert len(disco_publishes) == 1
+
+
+@pytest.mark.asyncio
 async def test_ha_status_topic(caplog: pytest.LogCaptureFixture) -> None:
     """Test connect."""
     with patch("mqtt_entity.client.AClient") as paho_client_class:  # patch paho Client
