@@ -4,7 +4,7 @@ requires = [ "uv-build>=0.12,<0.13" ]
 
 [project]
 name = "mqtt-entity"
-version = "1.2.3"
+version = "1.2.4"
 description = "MQTT client supporting Home Assistant MQTT entity auto-discovery"
 readme = "README.md"
 keywords = [
