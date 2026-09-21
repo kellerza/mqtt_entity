@@ -6,9 +6,15 @@ from unittest import mock
 
 import pytest
 
-from mqtt_entity.options import MQTTOptions
+from mqtt_entity.options import MQTTOptions, safe_load
 
 OPT = MQTTOptions()
+
+
+def test_yaml_safe_load() -> None:
+    """YAML options extra uses yamlrocks (PyYAML-compatible safe_load)."""
+    assert safe_load is not None
+    assert safe_load("mqtt_port: 123\n")["mqtt_port"] == 123
 
 
 def test_load() -> None:

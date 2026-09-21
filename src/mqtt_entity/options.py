@@ -16,7 +16,7 @@ from . import supervisor
 from .utils import logging_color
 
 try:
-    from yaml import safe_load
+    from yamlrocks.compat import safe_load
 except ImportError:
     safe_load = None  # type: ignore[assignment]
 
@@ -89,7 +89,9 @@ class AddonOptions:
                 _LOG.error("Unsupported config file type: %s", fpath)
                 continue
             if is_yml and safe_load is None:
-                _LOG.error("PyYAML not installed, cannot read YAML config: %s", fpath)
+                _LOG.error(
+                    "yamlrocks not installed, cannot read YAML config: %s", fpath
+                )
                 continue
             with fpath.open("r", encoding="utf-8") as fptr:
                 try:

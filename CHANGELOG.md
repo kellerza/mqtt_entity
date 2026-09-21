@@ -4,6 +4,7 @@
 
 ### What's changed
 
+- `mqtt-entity[options]` now depends on yamlrocks instead of PyYAML.
 - Cache ``MQTTDevice.discovery_info`` as ``(topic, payload)``; ``flag_discovery()`` invalidates after a 5s debounce.
   The HA-online client loop republishes only when the compact JSON payload changes.
   Cache clears on HA offline / MQTT disconnect so a real restart still rediscovers.
