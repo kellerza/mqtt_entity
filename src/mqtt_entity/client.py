@@ -495,7 +495,7 @@ class MQTTClient(MQTTAsyncClient):
             else:
                 self._last_discovery[disco_topic] = disco_payload
                 try:
-                    await self.publish(disco_topic, disco_payload)
+                    await self.publish(disco_topic, disco_payload, retain=True)
                 except Exception:
                     self._last_discovery.pop(disco_topic)
                     raise
