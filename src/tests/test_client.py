@@ -193,7 +193,7 @@ async def test_connect(caplog: pytest.LogCaptureFixture) -> None:
         )
 
         assert cmock.async_publish.call_args_list == [
-            call("homeassistant/device/test123/config", disco_info, 0, False),
+            call("homeassistant/device/test123/config", disco_info, 1, True),
             call("test/status", "online", 1, True),
         ]
 
