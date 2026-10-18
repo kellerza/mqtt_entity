@@ -35,6 +35,7 @@ _LOG = logging.getLogger(__name__)
 MQTT_EXPLORER_LIMIT = 20000
 _RECONNECT_INTERVAL_SECONDS = 10
 _DISCOVERY_INTERVAL_SECONDS = 5
+_HA_ONLINE_DEBOUNCE_SECONDS = 3
 
 type TopicCallback = (
     Callable[[str, str], Coroutine[Any, Any, None]]
@@ -47,6 +48,8 @@ class MQTTAsyncClient:
     """Async MQTT Client."""
 
     availability_topic: str = ""
+    mqtt_republish: int = 0
+    """Seconds after HA-online debounce to republish discovery once; 0 disables."""
     client: AClient = field(init=False, repr=False)
     suppress_exceptions: bool = True
     connect_time: float = field(init=False, repr=False)
@@ -108,6 +111,9 @@ class MQTTAsyncClient:
             password = getattr(options, "mqtt_password", password)
             host = getattr(options, "mqtt_host", host)
             port = getattr(options, "mqtt_port", port)
+            self.mqtt_republish = getattr(
+                options, "mqtt_republish", self.mqtt_republish
+            )
         self.client.username_pw_set(username=username, password=password)
 
         if self.availability_topic:
@@ -365,6 +371,62 @@ class MQTTClient(MQTTAsyncClient):
     _discovery_task: asyncio.Task[None] | None = field(default=None, repr=False)
     _last_discovery: dict[str, str] = field(default_factory=dict, repr=False)
     """Last published discovery payload per topic."""
+    _ha_online_debounce_task: asyncio.Task[None] | None = field(
+        default=None, repr=False
+    )
+    _ha_republish_task: asyncio.Task[None] | None = field(default=None, repr=False)
+    _ha_online_gen: int = field(default=0, repr=False)
+
+    def _cancel_ha_online_tasks(self) -> None:
+        """Cancel pending HA-online debounce and republish tasks."""
+        for name in ("_ha_online_debounce_task", "_ha_republish_task"):
+            task: asyncio.Task[None] | None = getattr(self, name)
+            if task is not None and not task.done():
+                task.cancel()
+            setattr(self, name, None)
+
+    async def _ha_online_debounce_work(self, gen: int) -> None:
+        """Publish discovery after HA online debounce (generation ``gen``)."""
+        try:
+            await asyncio.sleep(_HA_ONLINE_DEBOUNCE_SECONDS)
+        except asyncio.CancelledError:
+            return
+        if gen != self._ha_online_gen or not self._ha_online:
+            return
+        async with self._discovery_lock:
+            if gen != self._ha_online_gen or not self._ha_online:
+                return
+            self._last_discovery.clear()
+            _LOG.info(
+                "MQTT: Home Assistant online. Publish discovery info for %s",
+                [d.name for d in self.devs],
+            )
+            await self._publish_discovery_info_locked()
+            self._start_discovery_loop()
+            if self.mqtt_republish > 0 and gen == self._ha_online_gen:
+                self._ha_republish_task = asyncio.get_running_loop().create_task(
+                    self._ha_republish_work(gen)
+                )
+        self._ha_online_debounce_task = None
+
+    async def _ha_republish_work(self, gen: int) -> None:
+        """Follow-up publish of discovery info if after mqtt_republish."""
+        try:
+            await asyncio.sleep(self.mqtt_republish)
+        except asyncio.CancelledError:
+            return
+        if gen != self._ha_online_gen or not self._ha_online:
+            return
+        async with self._discovery_lock:
+            if gen != self._ha_online_gen or not self._ha_online:
+                return
+            self._last_discovery.clear()
+            _LOG.info(
+                "MQTT: Republish discovery info for %s",
+                [d.name for d in self.devs],
+            )
+            await self._publish_discovery_info_locked()
+        self._ha_republish_task = None
 
     def _mqtt_on_disconnect(
         self,
@@ -375,6 +437,7 @@ class MQTTClient(MQTTAsyncClient):
         _properties: Properties | None = None,
     ) -> None:
         """MQTT on_disconnect callback."""
+        self._cancel_ha_online_tasks()
         self._cancel_discovery_loop()
         self._last_discovery.clear()
         super()._mqtt_on_disconnect(
@@ -383,6 +446,7 @@ class MQTTClient(MQTTAsyncClient):
 
     async def disconnect(self) -> None:
         """Stop the MQTT client."""
+        self._cancel_ha_online_tasks()
         self._cancel_discovery_loop()
         await super().disconnect()
 
@@ -442,6 +506,7 @@ class MQTTClient(MQTTAsyncClient):
             """Republish discovery info."""
             if payload_s != "online":
                 self._ha_online = False
+                self._cancel_ha_online_tasks()
                 self._cancel_discovery_loop()
                 self._last_discovery.clear()
                 _LOG.warning(
@@ -449,18 +514,13 @@ class MQTTClient(MQTTAsyncClient):
                 )
                 return
             timeout.cancel()
-            # Check+set under the discovery lock so concurrent retained
-            # redeliveries cannot both pass a unlocked _ha_online guard.
-            async with self._discovery_lock:
-                if self._ha_online:
-                    return
-                self._ha_online = True
-                _LOG.info(
-                    "MQTT: Home Assistant online. Publish discovery info for %s",
-                    [d.name for d in self.devs],
-                )
-                await self._publish_discovery_info_locked()
-                self._start_discovery_loop()
+            self._ha_online = True
+            self._ha_online_gen += 1
+            gen = self._ha_online_gen
+            self._cancel_ha_online_tasks()
+            self._ha_online_debounce_task = asyncio.get_running_loop().create_task(
+                self._ha_online_debounce_work(gen)
+            )
 
         await self.topic_subscribe(HA_STATUS_TOPIC, _online_cb)
         if self.connect_time == 0:
