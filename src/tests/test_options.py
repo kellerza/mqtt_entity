@@ -49,9 +49,8 @@ def test_load_env() -> None:
 def test_load_env_bad() -> None:
     """Tests."""
     environ = {"MQTT_PORT": "30seconds"}
-    with pytest.raises(ValueError):
-        with mock.patch.dict(os.environ, environ, clear=True):
-            OPT.load_env()
+    with pytest.raises(ValueError), mock.patch.dict(os.environ, environ, clear=True):
+        OPT.load_env()
 
 
 @dataclass
