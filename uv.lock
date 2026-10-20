@@ -426,7 +426,7 @@ wheels = [
 
 [[package]]
 name = "mqtt-entity"
-version = "1.2.9"
+version = "1.2.10"
 source = { editable = "." }
 dependencies = [
     { name = "aiohttp" },

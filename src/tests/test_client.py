@@ -18,6 +18,21 @@ from mqtt_entity.options import MQTTOptions
 
 _LOG = logging.getLogger(__name__)
 
+_HA_DEBOUNCE_TEST_SECONDS = 0.02
+
+
+async def _wait_ha_debounce() -> None:
+    """Wait for patched HA-online debounce to fire."""
+    await asyncio.sleep(_HA_DEBOUNCE_TEST_SECONDS * 3)
+
+
+def _disco_config_publishes(cmock: MagicMock) -> list:
+    return [
+        c
+        for c in cmock.async_publish.await_args_list
+        if c.args and str(c.args[0]).endswith("/config")
+    ]
+
 
 def _mock_paho_client() -> MagicMock:
     """Return a mock AsyncMQTTClient with async transport methods."""
@@ -509,7 +524,13 @@ async def test_ha_online_dedupes_concurrent_status(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     """Concurrent retained homeassistant/status online only publishes discovery once."""
-    with patch("mqtt_entity.client.AClient") as paho_client_class:
+    with (
+        patch("mqtt_entity.client.AClient") as paho_client_class,
+        patch(
+            "mqtt_entity.client._HA_ONLINE_DEBOUNCE_SECONDS",
+            _HA_DEBOUNCE_TEST_SECONDS,
+        ),
+    ):
         cmock = paho_client_class.return_value = _mock_paho_client()
         mqc = MQTTClient(availability_topic="test/status", clean_entities=0)
         mqc.devs.append(MQTTDevice(identifiers=["inv1"], name="ss", components={}))
@@ -520,16 +541,10 @@ async def test_ha_online_dedupes_concurrent_status(
         online = mqc._on_message_filtered[HA_STATUS_TOPIC]
 
         await asyncio.gather(online("online", ""), online("online", ""))
+        await _wait_ha_debounce()
 
         assert caplog.text.count("MQTT: Home Assistant online") == 1
-        assert cmock.async_publish.await_count >= 1
-        # device discovery + availability
-        disco_publishes = [
-            c
-            for c in cmock.async_publish.await_args_list
-            if c.args and str(c.args[0]).endswith("/config")
-        ]
-        assert len(disco_publishes) == 1
+        assert len(_disco_config_publishes(cmock)) == 1
         mqc._cancel_discovery_loop()
 
 
@@ -538,7 +553,13 @@ async def test_publish_discovery_skips_unchanged_payload(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     """HA online + immediate publish_discovery_info must not republish same config."""
-    with patch("mqtt_entity.client.AClient") as paho_client_class:
+    with (
+        patch("mqtt_entity.client.AClient") as paho_client_class,
+        patch(
+            "mqtt_entity.client._HA_ONLINE_DEBOUNCE_SECONDS",
+            _HA_DEBOUNCE_TEST_SECONDS,
+        ),
+    ):
         cmock = paho_client_class.return_value = _mock_paho_client()
         mqc = MQTTClient(availability_topic="test/status", clean_entities=0)
         mqc.devs.append(MQTTDevice(identifiers=["inv1"], name="ss", components={}))
@@ -547,41 +568,33 @@ async def test_publish_discovery_skips_unchanged_payload(
 
         await mqc.monitor_homeassistant_status()
         await mqc._on_message_filtered[HA_STATUS_TOPIC]("online", "")
+        await _wait_ha_debounce()
         await mqc.publish_discovery_info()
 
-        disco_publishes = [
-            c
-            for c in cmock.async_publish.await_args_list
-            if c.args and str(c.args[0]).endswith("/config")
-        ]
-        assert len(disco_publishes) == 1
+        assert len(_disco_config_publishes(cmock)) == 1
         assert "Skip unchanged discovery" in caplog.text
 
         await mqc._publish_device_config()
-        disco_publishes = [
-            c
-            for c in cmock.async_publish.await_args_list
-            if c.args and str(c.args[0]).endswith("/config")
-        ]
-        assert len(disco_publishes) == 1
+        assert len(_disco_config_publishes(cmock)) == 1
 
         # HA offline clears cache; next online must publish again
         await mqc._on_message_filtered[HA_STATUS_TOPIC]("offline", "")
         await mqc._on_message_filtered[HA_STATUS_TOPIC]("online", "")
-        disco_publishes = [
-            c
-            for c in cmock.async_publish.await_args_list
-            if c.args and str(c.args[0]).endswith("/config")
-        ]
-        assert len(disco_publishes) == 2
+        await _wait_ha_debounce()
+        assert len(_disco_config_publishes(cmock)) == 2
         mqc._cancel_discovery_loop()
 
 
 @pytest.mark.asyncio
 async def test_ha_status_topic(caplog: pytest.LogCaptureFixture) -> None:
     """Test connect."""
-    with patch("mqtt_entity.client.AClient") as paho_client_class:  # patch paho Client
-        # return a mock when you instantiate
+    with (
+        patch("mqtt_entity.client.AClient") as paho_client_class,
+        patch(
+            "mqtt_entity.client._HA_ONLINE_DEBOUNCE_SECONDS",
+            _HA_DEBOUNCE_TEST_SECONDS,
+        ),
+    ):
         cmock = paho_client_class.return_value = _mock_paho_client()
         mqc = MQTTClient(availability_topic="test/status")
 
@@ -596,7 +609,179 @@ async def test_ha_status_topic(caplog: pytest.LogCaptureFixture) -> None:
 
         assert "MQTT: Home Assistant online" not in caplog.text
         await mqc._on_message_filtered[HA_STATUS_TOPIC]("online", "")
+        await _wait_ha_debounce()
         assert "MQTT: Home Assistant online" in caplog.text
-        await asyncio.sleep(0.1)
         assert "Timeout waiting for Home Assistant" not in caplog.text
+        mqc._cancel_discovery_loop()
+
+
+@pytest.mark.asyncio
+async def test_ha_online_waits_for_debounce_before_publish() -> None:
+    """Discovery is not published until the HA-online debounce elapses."""
+    with (
+        patch("mqtt_entity.client.AClient") as paho_client_class,
+        patch(
+            "mqtt_entity.client._HA_ONLINE_DEBOUNCE_SECONDS",
+            _HA_DEBOUNCE_TEST_SECONDS,
+        ),
+    ):
+        cmock = paho_client_class.return_value = _mock_paho_client()
+        mqc = MQTTClient(availability_topic="test/status", clean_entities=0)
+        mqc.devs.append(MQTTDevice(identifiers=["inv1"], name="ss", components={}))
+        cmock.is_connected.return_value = True
+        mqc.connect_time = 1
+        await mqc.monitor_homeassistant_status()
+        online = mqc._on_message_filtered[HA_STATUS_TOPIC]
+
+        await online("online", "")
+        await asyncio.sleep(_HA_DEBOUNCE_TEST_SECONDS / 2)
+        assert len(_disco_config_publishes(cmock)) == 0
+        await _wait_ha_debounce()
+        assert len(_disco_config_publishes(cmock)) == 1
+        mqc._cancel_discovery_loop()
+
+
+@pytest.mark.asyncio
+async def test_ha_online_without_offline_republishes_discovery() -> None:
+    """MQTT integration reload: online without offline still rediscovers."""
+    with (
+        patch("mqtt_entity.client.AClient") as paho_client_class,
+        patch(
+            "mqtt_entity.client._HA_ONLINE_DEBOUNCE_SECONDS",
+            _HA_DEBOUNCE_TEST_SECONDS,
+        ),
+    ):
+        cmock = paho_client_class.return_value = _mock_paho_client()
+        mqc = MQTTClient(availability_topic="test/status", clean_entities=0)
+        mqc.devs.append(MQTTDevice(identifiers=["inv1"], name="ss", components={}))
+        cmock.is_connected.return_value = True
+        mqc.connect_time = 1
+        await mqc.monitor_homeassistant_status()
+        online = mqc._on_message_filtered[HA_STATUS_TOPIC]
+
+        await online("online", "")
+        await _wait_ha_debounce()
+        assert len(_disco_config_publishes(cmock)) == 1
+
+        await online("online", "")
+        await _wait_ha_debounce()
+        assert len(_disco_config_publishes(cmock)) == 2
+        mqc._cancel_discovery_loop()
+
+
+@pytest.mark.asyncio
+async def test_ha_offline_before_debounce_skips_discovery() -> None:
+    """Offline before debounce completes cancels the pending publish."""
+    with (
+        patch("mqtt_entity.client.AClient") as paho_client_class,
+        patch(
+            "mqtt_entity.client._HA_ONLINE_DEBOUNCE_SECONDS",
+            _HA_DEBOUNCE_TEST_SECONDS,
+        ),
+    ):
+        cmock = paho_client_class.return_value = _mock_paho_client()
+        mqc = MQTTClient(availability_topic="test/status", clean_entities=0)
+        mqc.devs.append(MQTTDevice(identifiers=["inv1"], name="ss", components={}))
+        cmock.is_connected.return_value = True
+        mqc.connect_time = 1
+        await mqc.monitor_homeassistant_status()
+        online = mqc._on_message_filtered[HA_STATUS_TOPIC]
+
+        await online("online", "")
+        await online("offline", "")
+        await _wait_ha_debounce()
+        assert len(_disco_config_publishes(cmock)) == 0
+        mqc._cancel_discovery_loop()
+
+
+@pytest.mark.asyncio
+async def test_mqtt_republish_follows_debounce(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """mqtt_republish schedules one follow-up discovery publish."""
+    republish_delay = 0.03
+    with (
+        patch("mqtt_entity.client.AClient") as paho_client_class,
+        patch(
+            "mqtt_entity.client._HA_ONLINE_DEBOUNCE_SECONDS",
+            _HA_DEBOUNCE_TEST_SECONDS,
+        ),
+    ):
+        cmock = paho_client_class.return_value = _mock_paho_client()
+        mqc = MQTTClient(availability_topic="test/status", clean_entities=0)
+        mqc.mqtt_republish = republish_delay  # type:ignore[assignment]
+        mqc.devs.append(MQTTDevice(identifiers=["inv1"], name="ss", components={}))
+        cmock.is_connected.return_value = True
+        mqc.connect_time = 1
+        await mqc.monitor_homeassistant_status()
+        online = mqc._on_message_filtered[HA_STATUS_TOPIC]
+
+        await online("online", "")
+        await asyncio.sleep(_HA_DEBOUNCE_TEST_SECONDS * 1.5)
+        assert len(_disco_config_publishes(cmock)) == 1
+        await asyncio.sleep(republish_delay * 2)
+        assert len(_disco_config_publishes(cmock)) == 2
+        assert "MQTT: Republish discovery info" in caplog.text
+        mqc._cancel_discovery_loop()
+
+
+@pytest.mark.asyncio
+async def test_mqtt_republish_cancelled_by_new_online() -> None:
+    """A new online during republish wait cancels the pending follow-up."""
+    republish_delay = 0.06
+    with (
+        patch("mqtt_entity.client.AClient") as paho_client_class,
+        patch(
+            "mqtt_entity.client._HA_ONLINE_DEBOUNCE_SECONDS",
+            _HA_DEBOUNCE_TEST_SECONDS,
+        ),
+    ):
+        cmock = paho_client_class.return_value = _mock_paho_client()
+        mqc = MQTTClient(availability_topic="test/status", clean_entities=0)
+        mqc.mqtt_republish = republish_delay  # type:ignore[assignment]
+        mqc.devs.append(MQTTDevice(identifiers=["inv1"], name="ss", components={}))
+        cmock.is_connected.return_value = True
+        mqc.connect_time = 1
+        await mqc.monitor_homeassistant_status()
+        online = mqc._on_message_filtered[HA_STATUS_TOPIC]
+
+        await online("online", "")
+        await asyncio.sleep(_HA_DEBOUNCE_TEST_SECONDS * 1.5)
+        assert len(_disco_config_publishes(cmock)) == 1
+        await asyncio.sleep(republish_delay / 2)
+        await online("online", "")
+        await asyncio.sleep(_HA_DEBOUNCE_TEST_SECONDS * 1.5)
+        assert len(_disco_config_publishes(cmock)) == 2
+        # Past when the first republish would have fired, before the second cycle's.
+        await asyncio.sleep(republish_delay * 0.75)
+        assert len(_disco_config_publishes(cmock)) == 2
+        mqc._cancel_discovery_loop()
+
+
+@pytest.mark.asyncio
+async def test_mqtt_republish_cancelled_by_offline() -> None:
+    """Offline during republish wait cancels the follow-up."""
+    republish_delay = 0.06
+    with (
+        patch("mqtt_entity.client.AClient") as paho_client_class,
+        patch(
+            "mqtt_entity.client._HA_ONLINE_DEBOUNCE_SECONDS",
+            _HA_DEBOUNCE_TEST_SECONDS,
+        ),
+    ):
+        cmock = paho_client_class.return_value = _mock_paho_client()
+        mqc = MQTTClient(availability_topic="test/status", clean_entities=0)
+        mqc.mqtt_republish = republish_delay  # type:ignore[assignment]
+        mqc.devs.append(MQTTDevice(identifiers=["inv1"], name="ss", components={}))
+        cmock.is_connected.return_value = True
+        mqc.connect_time = 1
+        await mqc.monitor_homeassistant_status()
+        online = mqc._on_message_filtered[HA_STATUS_TOPIC]
+
+        await online("online", "")
+        await _wait_ha_debounce()
+        assert len(_disco_config_publishes(cmock)) == 1
+        await online("offline", "")
+        await asyncio.sleep(republish_delay * 2)
+        assert len(_disco_config_publishes(cmock)) == 1
         mqc._cancel_discovery_loop()

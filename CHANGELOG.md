@@ -4,6 +4,10 @@
 
 ### What's changed
 
+- Debounce `homeassistant/status` **online** by 3s before publishing discovery (fixes MQTT integration reload without a preceding **offline**; #48).
+  Each **online** restarts the timer so subscribe races still publish once.
+- Optional `mqtt_republish` / `MQTT_REPUBLISH`: seconds after that debounce for one
+  follow-up discovery publish (default `0`, disabled).
 - `mqtt-entity[options]` now depends on yamlrocks instead of PyYAML.
 - Cache ``MQTTDevice.discovery_info`` as ``(topic, payload)``; ``flag_discovery()`` invalidates after a 5s debounce.
   The HA-online client loop republishes only when the compact JSON payload changes.

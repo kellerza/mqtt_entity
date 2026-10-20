@@ -122,6 +122,9 @@ class MQTTOptions(AddonOptions):
     mqtt_custom: bool = False
     """Enable custom MQTT configuration. Ignore the supervisor."""
 
+    mqtt_republish: int = 0
+    """Seconds after HA-online debounce for a follow-up discovery publish; 0 disables."""
+
     async def init_addon(self) -> None:
         """Initialize MQTT options from environment variables and config files."""
         await super().init_addon()
