@@ -16,7 +16,7 @@ Features:
   - Availability management (client-wide and optional per-device `availability_topics`)
   - Manage entities per device
 - Home Assistant Entities modelled as dataclasses:
-  - Read-only: Sensor, BinarySensor
+  - Read-only: Sensor, BinarySensor, DeviceTracker
   - Read & write: Select, Switch, Number, Text, Light
   - MQTT device events
 - Asyncio based

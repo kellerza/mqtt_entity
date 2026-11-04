@@ -201,6 +201,49 @@ class MQTTBinarySensorEntity(MQTTEntity):
 
 
 @dataclass
+class MQTTDeviceTrackerEntity(MQTTEntity):
+    """A Home Assistant Device Tracker entity.
+
+    https://www.home-assistant.io/integrations/device_tracker.mqtt/
+    """
+
+    payload_home: str = "home"
+    payload_not_home: str = "not_home"
+    payload_reset: str = "None"
+    source_type: str = ""
+
+    platform = "device_tracker"
+
+    async def send_home(self, client: MQTTAsyncClient, *, retain: bool = False) -> None:
+        """Publish the home state to the MQTT state topic."""
+        await self.send_state(client, self.payload_home, retain=retain)
+
+    async def send_not_home(
+        self, client: MQTTAsyncClient, *, retain: bool = False
+    ) -> None:
+        """Publish the not_home state to the MQTT state topic."""
+        await self.send_state(client, self.payload_not_home, retain=retain)
+
+    async def send_location(
+        self,
+        client: MQTTAsyncClient,
+        latitude: float,
+        longitude: float,
+        gps_accuracy: float | None = None,
+        *,
+        retain: bool = True,
+    ) -> None:
+        """Publish GPS coordinates to the MQTT JSON attributes topic."""
+        attributes: dict[str, Any] = {
+            "latitude": latitude,
+            "longitude": longitude,
+        }
+        if gps_accuracy is not None:
+            attributes["gps_accuracy"] = gps_accuracy
+        await self.send_json_attributes(client, attributes, retain=retain)
+
+
+@dataclass
 class MQTTSelectEntity(MQTTRWEntity):
     """A HomeAssistant Select entity."""
 

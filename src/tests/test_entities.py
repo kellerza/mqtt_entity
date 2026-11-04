@@ -7,6 +7,7 @@ import pytest
 
 from mqtt_entity import (
     MQTTDevice,
+    MQTTDeviceTrackerEntity,
     MQTTDeviceTrigger,
     MQTTEntity,
     MQTTNumberEntity,
@@ -228,6 +229,81 @@ def test_mqtt_device_discovery_multi_availability_mode() -> None:
     _, d1_payload = dev_any.discovery_info(origin=origin)
     d1 = loads(d1_payload)
     assert d1["avty_mode"] == "any"
+
+
+def test_mqtt_device_tracker_discovery() -> None:
+    """Device tracker discovery payload and abbreviations."""
+    ent = MQTTDeviceTrackerEntity(
+        name="My Tracker",
+        unique_id="tr1",
+        state_topic="/loc/tr1",
+        payload_home="HOME",
+        source_type="gps",
+    )
+    dev = MQTTDevice(identifiers=[("serial", "123")], components={"tr1": ent})
+    origin = MQTTOrigin(name="Test Origin")
+    _, d_payload = dev.discovery_info(origin=origin)
+    d_dict = loads(d_payload)
+    assert d_dict["cmps"]["tr1"] == {
+        "name": "My Tracker",
+        "p": "device_tracker",
+        "uniq_id": "tr1",
+        "stat_t": "/loc/tr1",
+        "pl_home": "HOME",
+        "src_type": "gps",
+    }
+
+
+def test_mqtt_device_tracker_gps_only_discovery() -> None:
+    """GPS-only tracker omits empty state_topic from discovery."""
+    ent = MQTTDeviceTrackerEntity(
+        name="GPS",
+        unique_id="tr2",
+        state_topic="",
+        json_attributes_topic="/loc/tr2/attributes",
+    )
+    dev = MQTTDevice(identifiers=[("serial", "456")], components={"tr2": ent})
+    origin = MQTTOrigin(name="Test Origin")
+    _, d_payload = dev.discovery_info(origin=origin)
+    d_dict = loads(d_payload)
+    cmp = d_dict["cmps"]["tr2"]
+    assert cmp["p"] == "device_tracker"
+    assert cmp["json_attr_t"] == "/loc/tr2/attributes"
+    assert "stat_t" not in cmp
+
+
+@pytest.mark.asyncio
+async def test_device_tracker_send_home() -> None:
+    """send_home publishes payload_home to state_topic."""
+    ent = MQTTDeviceTrackerEntity(
+        name="t",
+        unique_id="tr3",
+        state_topic="/loc/tr3",
+        payload_home="home",
+    )
+    mc = AsyncMock(spec=MQTTAsyncClient)
+    await ent.send_home(mc, retain=True)
+    mc.publish.assert_awaited_once_with("/loc/tr3", "home", retain=True)
+
+
+@pytest.mark.asyncio
+async def test_device_tracker_send_location() -> None:
+    """send_location publishes GPS attributes as JSON."""
+    ent = MQTTDeviceTrackerEntity(
+        name="t",
+        unique_id="tr4",
+        state_topic="/loc/tr4",
+        json_attributes_topic="/loc/tr4/attributes",
+    )
+    mc = AsyncMock(spec=MQTTAsyncClient)
+    await ent.send_location(mc, 32.87336, -117.22743, 1.2)
+    mc.publish.assert_awaited_once()
+    assert mc.publish.call_args[1]["topic"] == "/loc/tr4/attributes"
+    assert loads(mc.publish.call_args[1]["payload"]) == {
+        "latitude": 32.87336,
+        "longitude": -117.22743,
+        "gps_accuracy": 1.2,
+    }
 
 
 @pytest.mark.asyncio

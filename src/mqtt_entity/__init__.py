@@ -5,6 +5,7 @@ from mqtt_entity.device import AvailabilityMode, MQTTDevice
 from mqtt_entity.entities import (
     MQTTBaseEntity,
     MQTTBinarySensorEntity,
+    MQTTDeviceTrackerEntity,
     MQTTDeviceTrigger,
     MQTTEntity,
     MQTTLightEntity,
@@ -22,6 +23,7 @@ __all__ = [
     "MQTTBinarySensorEntity",
     "MQTTClient",
     "MQTTDevice",
+    "MQTTDeviceTrackerEntity",
     "MQTTDeviceTrigger",
     "MQTTEntity",
     "MQTTLightEntity",
