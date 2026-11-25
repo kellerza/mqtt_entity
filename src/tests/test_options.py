@@ -59,3 +59,38 @@ class LoadEnvClass(MQTTOptions):
 
     lst: list = field(default_factory=list)
     num: int = 0
+
+
+@dataclass
+class OptionalListOptions(MQTTOptions):
+    """Sunsynk-style optional sensor override configuration."""
+
+    sensor_overrides: list[str] | None = None
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ('["battery_current.factor=0.1"]', ["battery_current.factor=0.1"]),
+        (
+            "battery_current.factor=0.1,day_pv_energy.factor=0.1",
+            ["battery_current.factor=0.1", "day_pv_energy.factor=0.1"],
+        ),
+        ("[]", []),
+        ("null", None),
+    ],
+)
+def test_load_env_optional_list(value: str, expected: list[str] | None) -> None:
+    """Optional list settings use the same JSON/CSV parsing as other lists."""
+    opt = OptionalListOptions()
+    with mock.patch.dict(os.environ, {"SENSOR_OVERRIDES": value}, clear=True):
+        assert opt.load_env()
+    assert opt.sensor_overrides == expected
+
+
+def test_load_env_optional_list_unset() -> None:
+    """An absent optional setting does not overwrite an existing value."""
+    opt = OptionalListOptions(sensor_overrides=["battery_current.factor=0.1"])
+    with mock.patch.dict(os.environ, {}, clear=True):
+        assert not opt.load_env()
+    assert opt.sensor_overrides == ["battery_current.factor=0.1"]

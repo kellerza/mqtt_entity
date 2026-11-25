@@ -7,7 +7,7 @@ from dataclasses import Field, dataclass, fields, is_dataclass
 from json import load, loads
 from json.decoder import JSONDecodeError
 from pathlib import Path
-from typing import Any, cast, get_origin
+from typing import Any, cast, get_args, get_origin
 
 from cattrs import Converter, transform_error
 from cattrs.gen import make_dict_structure_fn
@@ -51,7 +51,11 @@ class AddonOptions:
             if not val:
                 continue
             name = att.name.lower()
-            if att.type is list or get_origin(att.type) is list:
+            att_type = att.type
+            args = get_args(att_type)
+            if len(args) == 2 and type(None) in args:
+                att_type = next(arg for arg in args if arg is not type(None))
+            if att_type is list or get_origin(att_type) is list:
                 try:
                     res[name] = loads(val)
                 except JSONDecodeError:
